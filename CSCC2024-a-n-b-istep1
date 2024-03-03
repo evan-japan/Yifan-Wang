@@ -1,0 +1,3113 @@
+mod! LABEL{ 
+ [Label]
+ ops start accel nothing brake : -> Label
+ pred _=_ : Label Label {comm} 
+ var L : Label
+ eq (L = L) = true .
+ eq (accel = nothing) = false .
+ eq (accel = brake) = false .
+ eq (accel = start) = false .
+ eq (brake = nothing) = false .
+ eq (brake = start) = false .
+ eq (start = nothing) = false .
+}
+
+
+
+
+mod* PID{
+  [Pid]
+  pred _=_ : Pid Pid {comm}
+  op dummy : -> Pid
+  vars P Q : Pid
+  eq (P = P) = true .
+}
+
+
+
+
+
+mod! PSET{
+  [Pid < PSet]
+  op nil : -> PSet
+  op _ _ : PSet PSet -> PSet {assoc idr: nil}
+  op dummy : -> Pid
+  pred _in_ : Pid PSet 
+  pred empty : PSet
+  op first : PSet -> Pid
+  op last : PSet -> Pid
+  op _sub_ : PSet PSet -> Bool
+  op ps : -> PSet
+
+  vars P Q R P1 P2 : Pid
+  vars PS QS PS1 PS2 : PSet
+
+--> ✅  induction hypothesis, proof at 20240118a-d
+   eq (P Q PS sub QS) implies (P in QS) = true .
+   eq (P Q PS sub QS) implies (Q in QS) = true .
+    
+
+  eq (P in (P PS)) = true .
+  eq (P in nil) = false .
+  eq (P in Q) = (P = Q) .
+  eq (P in (Q PS)) = (P = Q) or (P in PS) .
+
+  eq (nil sub PS) = true .
+
+  eq (P sub nil) = false . 
+  eq (P sub PS) = (first(PS) = P) .
+
+  eq (PS sub nil) = (PS = nil) . 
+  
+  eq (PS sub P2) = (PS = P2) .
+
+  eq (PS1 sub P2 PS2) = ((PS1 = P2 PS2) or (PS1 sub PS2)) .
+
+  
+ eq (nil = nil) = true .
+ eq (P = nil) = false .
+ eq (P PS = nil) = false .
+ eq (P1 PS = P2) = (P1 = P2 and PS = nil) .
+ eq (P1 PS1 = P2 PS2) = (P1 = P2 and PS1 = PS2) .
+
+
+  eq first(nil) = dummy .
+  eq first(P) = P .
+  eq first(P PS) = first(PS) .
+
+  eq last(nil) = dummy .
+  eq last(P) = P .
+  eq last(P PS) = P .
+
+  eq empty(nil) = true .
+  eq empty(P) = false .
+  eq empty(P PS) = false .
+
+  eq (P PS = nil) = false .
+  eq (P = nil) = false .
+  eq (P = P) = true .
+}
+
+
+
+
+
+mod* MS{
+  pr(PSET + RAT + LABEL)
+  *[Sys]*
+
+ op init : -> Sys
+ 
+ op ac : Label -> Rat
+ op l : -> Rat
+ ops a1 a2 : -> Rat
+
+ op nextv : Rat Rat Rat -> Rat
+ op nextx : Rat Rat Rat Rat -> Rat
+
+ bop ps : Sys -> PSet {memo}
+ bop now : Sys -> Rat {memo}
+ bop loc : Pid Sys -> Label {memo}
+ bop x : Pid Sys -> Rat {memo}
+ bop v : Pid Sys -> Rat {memo}
+
+ bops a b n enter : Pid Sys -> Sys {memo}
+ bop c-enter : Pid Sys -> Bool
+
+ bop tick : Rat Sys -> Sys {memo}
+ op c-tick : Rat Sys -> Bool {memo}
+ op c-tick : PSet Rat Sys -> Bool {memo}
+
+ vars P Q P' P'' : Pid
+ vars PS : PSet
+ var S : Sys 
+ vars V A X T Y Z B C D : Rat
+
+ eq ac(accel) = 1 .
+ eq ac(brake) = -1 .
+ eq ac(nothing) = 0 .
+
+ eq nextv(V,A,T) = V + A * T .
+ eq nextx(X,V,A,T) = V * T + 1/2 * A * T * T + X .
+
+
+ eq c-tick(nil,T,S) = true .
+
+ eq c-tick(P,T,S) = 
+((loc(P,S) = brake or loc(P,S) = accel or loc(P,S) = nothing) implies
+ (0 <= nextv(v(P,S), ac(loc(P,S)), T) and nextv(v(P,S), ac(loc(P,S)), T) <= 4)) .
+
+ eq c-tick(P Q,T,S) = 
+c-tick(Q,T,S) and c-tick(P,T,S) and 
+(loc(P,S) = accel implies (nextx(x(P,S), v(P,S), ac(loc(P,S)), T) + 8 < nextx(x(Q,S), v(Q,S), ac(loc(Q,S)), T))) and
+(loc(P,S) = nothing implies (((0 < nextv(v(P,S), ac(loc(P,S)), T) and nextv(v(P,S), ac(loc(P,S)), T) <= 4) and 
+(nextx(x(P,S), v(P,S), ac(loc(P,S)), T) + 8 < nextx(x(Q,S), v(Q,S), ac(loc(Q,S)), T)))) or nextv(v(P,S), ac(loc(P,S)), T) = 0) .
+
+ eq c-tick(P Q PS,T,S) = c-tick(Q PS,T,S) and c-tick(P Q,T,S) .
+
+ eq c-tick(T,S) = c-tick(ps(S),T,S) .
+
+ ceq tick(T,S) = S if not c-tick(T,S) .
+ ceq loc(P,tick(T,S)) = loc(P,S) if c-tick(T,S) .
+ ceq now(tick(T,S)) = now(S) + T if c-tick(T,S) .
+ ceq v(P,tick(T,S)) = (if loc(P,S) = start then 0 else nextv(v(P,S), ac(loc(P,S)), T) fi) if c-tick(T,S) .
+ ceq x(P,tick(T,S)) = (if loc(P,S) = start then 0 else nextx(x(P,S), v(P,S), ac(loc(P,S)), T) fi) if c-tick(T,S) .
+ ceq ps(tick(T,S)) = ps(S) if c-tick(T,S) .
+
+ eq now(init) = 0 .
+ eq v(P,init) = 0 . 
+ eq x(P,init) = 0 .
+ eq loc(P,init) = start .
+ eq ps(init) = nil .
+
+ eq c-enter(P,S) = (loc(P,S) = start) and (ps(S) = nil or x(last(ps(S)),S) >= 14) .
+ ceq enter(P,S) = S if not c-enter(P,S) .
+ eq now(enter(P,S)) = now(S) .
+ ceq loc(P',enter(P,S)) = (if P' = P then accel else loc(P',S) fi) if c-enter(P,S) .   
+ ceq v(P',enter(P,S)) = (if P' = P then v(P,S) else v(P',S) fi) if c-enter(P,S) .
+ ceq x(P',enter(P,S)) = (if P' = P then x(P,S) else x(P',S) fi) if c-enter(P,S) .
+ ceq ps(enter(P,S)) = P ps(S) if c-enter(P,S) .
+
+ eq now(a(P,S)) = now(S) .
+ eq ps(a(P,S)) = ps(S) .
+ eq loc(P',a(P,S)) = (if P' = P then accel else loc(P',S) fi) .   
+ eq v(P',a(P,S)) = (if P' = P then v(P, S) else v(P', S) fi) .
+ eq x(P',a(P,S)) = (if P' = P then x(P, S) else x(P', S) fi) .
+
+ eq now(b(P,S)) = now(S) .
+ eq ps(b(P,S)) = ps(S) .
+ eq loc(P',b(P,S)) = (if P' = P then brake else loc(P',S) fi) .
+ eq v(P',b(P,S)) = (if P' = P then v(P, S) else v(P', S) fi) .
+ eq x(P',b(P,S)) = (if P' = P then x(P, S) else x(P', S) fi) .
+
+ eq now(n(P,S)) = now(S) .
+ eq ps(n(P,S)) = ps(S) .
+ eq loc(P',n(P,S)) = (if P' = P then nothing else loc(P',S) fi) .
+ eq v(P',n(P,S)) = (if P' = P then v(P, S) else v(P', S) fi) .
+ eq x(P',n(P,S)) = (if P' = P then x(P, S) else x(P', S) fi) .
+
+
+ eq X > X = false .
+  eq (0 * X) = 0 .
+
+ ceq (B > C) = true if B >= D and D > C .  -- (1)
+ ceq (B = C) = false if B > C .  -- (2)
+
+--  ceq (B < C) = true if (((D + B) < C) and (D > 0)) . -- lemma1
+--  ceq (B < C + D) = true if (B < C) and (0 <= D) . -- lemma2
+--  ceq (B < C + D) = true if (8 + B < C) and (D >= (-8)) . -- lemma3
+--  ceq (A + B < C + A) = true if (B < C) = true . -- lemma4
+
+
+}
+
+
+mod! SAFE{
+  pr(MS)
+  [Pid < PSet]
+  *[ Sys ]*
+
+ op safe : PSet Sys -> Bool
+ op Pr : PSet -> Bool
+ op s : -> Sys
+
+  var S : Sys
+  vars P Q : Pid
+  var PS : PSet
+ 
+  eq safe(nil,S) = true .
+
+  eq safe(P,S) = true .
+
+  eq safe(P Q,S) = (x(P,S) < x(Q,S)) .
+
+  eq safe(P Q PS,S) = safe(Q PS,S) and safe(P Q,S) .
+
+  eq Pr(PS) = (PS sub ps(s)) implies safe(PS,s) .
+}
+
+
+
+
+
+
+
+mod INV{
+  pr(SAFE)
+-- 20230111ecafeobj45edit
+
+   op inv1 : Pid Pid PSet Sys -> Bool
+   op inv2 : Pid Sys -> Bool
+   op inv3 : Pid Sys -> Bool
+   op inv4 : Pid Pid PSet Sys -> Bool
+
+
+   op lemma1 : PSet Rat Sys -> Bool
+
+   ops p q q' : -> Pid .
+   op qs' : -> PSet .
+
+   var S : Sys  
+   vars P Q Q' : Pid 
+   vars QS QS' : PSet 
+   var T : Rat
+
+
+
+   eq inv1(Q,Q',QS',S) = (Q Q' QS' sub ps(S) implies (x(Q,S) < x(Q',S))) . 
+   eq inv2(P,S) = (loc(P,S) = start implies x(P,S) = 0) . -- use for c-enter false case
+   eq inv3(P,S) = (P in ps(S)) implies (not loc(P,S) = start) . 
+   eq inv4(Q,Q',QS',S) = (Q Q' QS' sub ps(S) implies (x(Q,S) < (- 1/2 * v(Q,S) * v(Q,S)) + x(Q',S))) .
+   eq lemma1(QS,T,S) = ((c-tick(T,S) and (QS sub ps(S))) implies c-tick(QS,T,S)) .
+}
+
+
+
+
+
+
+
+--> inv1(init) (true)
+-->
+-->
+open INV .
+red inv1(q,q',qs',init) . -- (true):Bool
+close
+
+open INV .
+red inv2(q,init) . -- (true):Bool
+close
+
+open INV .
+red inv3(q,init) . -- (true):Bool
+close
+
+open INV .
+red inv4(q,q',qs',init) . -- (true):Bool
+close
+
+
+
+mod ISTEP{
+  pr(INV) .
+
+  op istep1 : Pid Pid PSet -> Bool
+  op istep2 : Pid -> Bool
+  op istep3 : Pid -> Bool
+  op istep4 : Pid Pid PSet -> Bool
+  op s' : -> Sys                 -- ops s s' : -> Sys
+
+  vars P Q Q' : Pid 
+  var QS' : PSet 
+
+  eq istep1(Q,Q',QS') = inv1(Q,Q',QS',s) implies inv1(Q,Q',QS',s') .
+  eq istep2(Q) = inv2(Q,s) implies inv2(Q,s') .
+  eq istep3(Q) = inv3(Q,s) implies inv3(Q,s') .
+  eq istep4(Q,Q',QS') = inv4(Q,Q',QS',s) implies inv4(Q,Q',QS',s') .
+
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+--> istep1 : a
+-->
+open ISTEP .
+
+op t1 : -> Rat .
+op p1 : -> Pid .
+eq s' = a(p1,s) .
+red istep1(q,q',qs') . -- ((((if (q = p1) then x(p1,s) else x(q,s) fi) < (if (q' = p1) then x(p1,s) else x(q',s) fi)) and ((x(q,s) < x(q',s)) and (((q q') qs') sub ps(s)))) xor (true xor ((x(q,s) < x(q',s)) and (((q q') qs') sub ps(s))))):Bool
+close
+
+--> istep1 : a
+-->
+open ISTEP .
+
+op t1 : -> Rat .
+op p1 : -> Pid .
+eq s' = a(p1,s) .
+eq q = p1 .
+red istep1(q,q',qs') .  -- (((x(p1,s) > (if (q' = p1) then x(p1,s) else x(q',s) fi)) and ((x(p1,s) > x(q',s)) and (((p1 q') qs') embed ps(s)))) xor (true xor ((x(p1,s) > x(q',s)) and (((p1 q') qs') embed ps(s))))):Bool
+close
+
+--> istep1 : a
+-->
+open ISTEP .
+
+op t1 : -> Rat .
+op p1 : -> Pid .
+eq s' = a(p1,s) .
+eq q = p1 .
+eq q' = p1 .
+red istep1(q,q',qs') .  -- (true):Bool
+close
+
+
+
+--> istep1 : a
+-->
+open ISTEP .
+
+op t1 : -> Rat .
+op p1 : -> Pid .
+eq s' = a(p1,s) .
+eq q = p1 .
+eq (q' = p1) = false .
+red istep1(q,q',qs') .  -- (true):Bool
+close
+
+
+
+--> istep1 : a
+-->
+open ISTEP .
+
+op t1 : -> Rat .
+op p1 : -> Pid .
+eq s' = a(p1,s) .
+eq (q = p1) = false .
+red istep1(q,q',qs') .  -- (((x(q,s) > (if (q' = p1) then x(p1,s) else x(q',s) fi)) and ((x(q,s) > x(q',s)) and (((q q') qs') embed ps(s)))) xor (true xor ((x(q,s) > x(q',s)) and (((q q') qs') embed ps(s))))):Bool
+close
+
+--> istep1 : a
+-->
+open ISTEP .
+
+op t1 : -> Rat .
+op p1 : -> Pid .
+eq s' = a(p1,s) .
+eq (q = p1) = false .
+eq q' = p1 .
+red istep1(q,q',qs') .  -- (true):Bool
+close
+
+
+--> istep1 : a
+-->
+open ISTEP .
+
+op t1 : -> Rat .
+op p1 : -> Pid .
+eq s' = a(p1,s) .
+eq (q = p1) = false .
+eq (q' = p1) = false .
+red istep1(q,q',qs') .  -- (true):Bool
+close
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+--> istep1 : n
+-->
+open ISTEP .
+
+op t1 : -> Rat .
+op p1 : -> Pid .
+eq s' = n(p1,s) .
+red istep1(q,q',qs') .  -- ((((if (q = p1) then x(p1,s) else x(q,s) fi) > (if (q' = p1) then x(p1,s) else x(q',s) fi)) and ((x(q,s) > x(q',s)) and (((q q') qs') embed ps(s)))) xor (true xor ((x(q,s) > x(q',s)) and (((q q') qs') embed ps(s))))):Bool
+close
+
+
+--> istep1 : n
+-->
+open ISTEP .
+
+op t1 : -> Rat .
+op p1 : -> Pid .
+eq s' = n(p1,s) .
+eq q = p1 .
+red istep1(q,q',qs') .  -- (((x(p1,s) > (if (q' = p1) then x(p1,s) else x(q',s) fi)) and ((x(p1,s) > x(q',s)) and (((p1 q') qs') embed ps(s)))) xor (true xor ((x(p1,s) > x(q',s)) and (((p1 q') qs') embed ps(s))))):Bool
+close
+
+--> istep1 : n
+-->
+open ISTEP .
+
+op t1 : -> Rat .
+op p1 : -> Pid .
+eq s' = n(p1,s) .
+eq q = p1 .
+eq q' = p1 .
+red istep1(q,q',qs') .  -- (true):Bool
+close
+
+
+--> istep1 : n
+-->
+open ISTEP .
+
+op t1 : -> Rat .
+op p1 : -> Pid .
+eq s' = n(p1,s) .
+eq q = p1 .
+eq (q' = p1) = false .
+red istep1(q,q',qs') .  -- (true):Bool
+close
+
+
+
+
+--> istep1 : n
+-->
+open ISTEP .
+
+op t1 : -> Rat .
+op p1 : -> Pid .
+eq s' = n(p1,s) .
+eq (q = p1) = false .
+red istep1(q,q',qs') .  -- (((x(q,s) > (if (q' = p1) then x(p1,s) else x(q',s) fi)) and ((x(q,s) > x(q',s)) and (((q q') qs') embed ps(s)))) xor (true xor ((x(q,s) > x(q',s)) and (((q q') qs') embed ps(s))))):Bool
+close
+
+--> istep1 : n
+-->
+open ISTEP .
+
+op t1 : -> Rat .
+op p1 : -> Pid .
+eq s' = n(p1,s) .
+eq (q = p1) = false .
+eq q' = p1 .
+red istep1(q,q',qs') .  -- (true):Bool
+close
+
+
+
+--> istep1 : n
+-->
+open ISTEP .
+
+op t1 : -> Rat .
+op p1 : -> Pid .
+eq s' = n(p1,s) .
+eq (q = p1) = false .
+eq (q' = p1) = false .
+red istep1(q,q',qs') .  -- (true):Bool
+close
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+--> istep1 : b
+-->
+open ISTEP .
+
+op t1 : -> Rat .
+op p1 : -> Pid .
+eq s' = b(p1,s) .
+red istep1(q,q',qs') .  -- ((((if (q = p1) then x(p1,s) else x(q,s) fi) > (if (q' = p1) then x(p1,s) else x(q',s) fi)) and ((x(q,s) > x(q',s)) and (((q q') qs') embed ps(s)))) xor (true xor ((x(q,s) > x(q',s)) and (((q q') qs') embed ps(s))))):Bool
+close
+
+
+
+
+--> istep1 : b
+-->
+open ISTEP .
+
+op t1 : -> Rat .
+op p1 : -> Pid .
+eq s' = b(p1,s) .
+eq q = p1 .
+red istep1(q,q',qs') .  -- (((x(p1,s) > (if (q' = p1) then x(p1,s) else x(q',s) fi)) and ((x(p1,s) > x(q',s)) and (((p1 q') qs') embed ps(s)))) xor (true xor ((x(p1,s) > x(q',s)) and (((p1 q') qs') embed ps(s))))):Bool
+close
+
+
+--> istep1 : b
+-->
+open ISTEP .
+
+op t1 : -> Rat .
+op p1 : -> Pid .
+eq s' = b(p1,s) .
+eq q = p1 .
+eq q' = p1 .
+red istep1(q,q',qs') .  -- (true):Bool
+close
+
+
+--> istep1 : b
+-->
+open ISTEP .
+
+op t1 : -> Rat .
+op p1 : -> Pid .
+eq s' = b(p1,s) .
+eq q = p1 .
+eq (q' = p1) = false .
+red istep1(q,q',qs') .  -- (true):Bool
+close
+
+
+
+
+--> istep1 : b
+-->
+open ISTEP .
+
+op t1 : -> Rat .
+op p1 : -> Pid .
+eq s' = b(p1,s) .
+eq (q = p1) = false .
+red istep1(q,q',qs') .  -- (((x(q,s) > (if (q' = p1) then x(p1,s) else x(q',s) fi)) and ((x(q,s) > x(q',s)) and (((q q') qs') embed ps(s)))) xor (true xor ((x(q,s) > x(q',s)) and (((q q') qs') embed ps(s))))):Bool
+close
+
+
+
+--> istep1 : b
+-->
+open ISTEP .
+
+op t1 : -> Rat .
+op p1 : -> Pid .
+eq s' = b(p1,s) .
+eq (q = p1) = false .
+eq q' = p1 .
+red istep1(q,q',qs') .  -- (true):Bool
+close
+
+
+
+--> istep1 : b
+-->
+open ISTEP .
+
+op t1 : -> Rat .
+op p1 : -> Pid .
+eq s' = b(p1,s) .
+eq (q = p1) = false .
+eq (q' = p1) = false .
+red istep1(q,q',qs') .  -- (true):Bool
+close
+
+
+
+
+
+
+
+
+
+
+eof
+-- ✅🔴🟢🌈🟡🟠🔵🟣tick
+-- ✅🔴🟢🌈🟡🟠🔵🟣tick
+-- ✅🔴🟢🌈🟡🟠🔵🟣tick
+-- ✅🔴🟢🌈🟡🟠🔵🟣tick
+-- ✅🔴🟢🌈🟡🟠🔵🟣tick
+-- ✅🔴🟢🌈🟡🟠🔵🟣tick
+-- ✅🔴🟢🌈🟡🟠🔵🟣tick
+-- ✅🔴🟢🌈🟡🟠🔵🟣tick
+
+open ISTEP .
+
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+
+red istep4(q,q',qs') . -- ((((if (loc(q,s) = start) then 0 else nextx(x(q,s),v(q,s),ac(loc(q,s)),t1) fi) < ((if (loc(q',s) = start) then 0 else nextx(x(q',s),v(q',s),ac(loc(q',s)),t1) fi) + (-1/2 * ((if (loc(q,s) = start) then 0 else nextv(v(q,s),ac(loc(q,s)),t1) fi) * (if (loc(q,s) = start) then 0 else nextv(v(q,s),ac(loc(q,s)),t1) fi))))) and ((x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) and (((q q') qs') sub ps(s)))) xor (true xor ((x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) and (((q q') qs') sub ps(s))))):Bool
+
+close
+
+open ISTEP . --> q:start,q'start
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq loc(q,s) = start .
+   
+red istep4(q,q',qs') . -- (((0 < (0 + (if (loc(q',s) = start) then 0 else nextx(x(q',s),v(q',s),ac(loc(q',s)),t1) fi))) and ((x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) and (((q q') qs') sub ps(s)))) xor (true xor ((x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) and (((q q') qs') sub ps(s))))):Bool
+
+close
+
+--> ✅q:start,q'start
+open ISTEP . --> q:start,q'start
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq loc(q,s) = start .
+   eq loc(q',s) = start .
+
+
+
+
+
+red istep4(q,q',qs') . -- (true xor ((x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) and (((q q') qs') sub ps(s)))):Bool
+
+close
+
+open ISTEP . --> q:start,q'start
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq loc(q,s) = start .
+   eq loc(q',s) = start .
+
+   eq (((q q') qs') sub ps(s)) = true .
+   eq (q in ps(s)) = true .   -- from induction hypothesis
+   eq (q' in ps(s)) = true .  -- from induction hypothesis
+
+
+
+red istep4(q,q',qs') . -- (true xor (x(q,s) < ((-1/2 * (v(q,s) * v(q,s))) + x(q',s)))):Bool
+red inv3(q,s) implies istep4(q,q',qs') . -- (true):Bool
+
+close
+
+
+open ISTEP . --> q:start,q'start
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq loc(q,s) = start .
+   eq loc(q',s) = start .
+
+   eq (((q q') qs') sub ps(s)) = false .
+
+red istep4(q,q',qs') . -- (true):Bool
+
+close
+
+
+open ISTEP . 
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq loc(q,s) = start .
+   eq (loc(q',s) = start) = false .
+
+
+
+ 
+
+red istep4(q,q',qs') . -- (((0 < ((1/2 * (t1 * (ac(loc(q',s)) * t1))) + (x(q',s) + (v(q',s) * t1)))) and ((x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) and (((q q') qs') sub ps(s)))) xor (true xor ((x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) and (((q q') qs') sub ps(s))))):Bool
+
+close
+
+
+
+
+
+
+
+
+--> ✅q:start,q'accel
+
+open ISTEP . --> q:start,q'accel
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq loc(q,s) = start .
+   eq (loc(q',s) = start) = false .
+   eq loc(q',s) = accel .
+
+
+red istep4(q,q',qs') . -- (((0 < ((1/2 * (t1 * t1)) + (x(q',s) + (v(q',s) * t1)))) and ((x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) and (((q q') qs') sub ps(s)))) xor (true xor ((x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) and (((q q') qs') sub ps(s))))):Bool
+
+close
+
+open ISTEP . --> q:start,q'accel
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq loc(q,s) = start .
+   eq (loc(q',s) = start) = false .
+   eq loc(q',s) = accel .
+
+
+   eq (((q q') qs') sub ps(s)) = true .  -- from the induction hypothesis
+   eq (q in ps(s)) = true . -- from the induction hypothesis
+
+
+red istep4(q,q',qs') . -- ((x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) xor (true xor ((0 < ((1/2 * (t1 * t1)) + (x(q',s) + (v(q',s) * t1)))) and (x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s)))))))):Bool
+red inv3(q,s) implies istep4(q,q',qs') . -- (true):Bool
+
+close
+
+open ISTEP . --> q:start,q'accel
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq loc(q,s) = start .
+   eq (loc(q',s) = start) = false .
+   eq loc(q',s) = accel .
+
+
+   eq (((q q') qs') sub ps(s)) = false .  
+
+red istep4(q,q',qs') . -- (true):Bool
+
+
+close
+
+
+
+
+
+
+
+
+--> ✅q:start,q'nothing
+
+open ISTEP . --> q:start,q'nothing
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq loc(q,s) = start .
+   eq (loc(q',s) = start) = false .
+   eq loc(q',s) = nothing .
+
+  red istep4(q,q',qs') . -- (((0 < ((v(q',s) * t1) + x(q',s))) and ((x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) and (((q q') qs') sub ps(s)))) xor (true xor ((x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) and (((q q') qs') sub ps(s))))):Bool
+close
+
+open ISTEP . --> q:start,q'nothing
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq loc(q,s) = start .
+   eq (loc(q',s) = start) = false .
+   eq loc(q',s) = nothing .
+
+   eq (((q q') qs') sub ps(s)) = true .  -- from the induction hypothesis
+   eq (q in ps(s)) = true . -- from the induction hypothesis
+
+
+
+red istep4(q,q',qs') . -- ((x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) xor (true xor ((0 < ((v(q',s) * t1) + x(q',s))) and (x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s)))))))):Bool
+red inv3(q,s) implies istep4(q,q',qs') . -- (true):Bool
+close
+
+
+
+open ISTEP . --> q:start,q'nothing
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq loc(q,s) = start .
+   eq (loc(q',s) = start) = false .
+   eq loc(q',s) = nothing .
+
+   eq (((q q') qs') sub ps(s)) = false .  
+
+red istep4(q,q',qs') . -- (true):Bool
+
+
+close
+
+
+
+
+
+
+
+
+
+
+
+--> ✅q:start,q'brake
+
+open ISTEP . --> q:start,q'brake
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq loc(q,s) = start .
+   eq (loc(q',s) = start) = false .
+   eq loc(q',s) = brake .
+
+  
+red istep4(q,q',qs') . -- (((0 < ((-1/2 * (t1 * t1)) + (x(q',s) + (v(q',s) * t1)))) and ((x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) and (((q q') qs') sub ps(s)))) xor (true xor ((x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) and (((q q') qs') sub ps(s))))):Bool
+close
+
+
+open ISTEP . --> q:start,q'brake
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq loc(q,s) = start .
+   eq (loc(q',s) = start) = false .
+   eq loc(q',s) = brake .
+
+   eq (((q q') qs') sub ps(s)) = true .  -- from the induction hypothesis
+   eq (q in ps(s)) = true . -- from the induction hypothesis
+
+red istep4(q,q',qs') . -- ((x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) xor (true xor ((0 < ((-1/2 * (t1 * t1)) + (x(q',s) + (v(q',s) * t1)))) and (x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s)))))))):Bool
+red inv3(q,s) implies istep4(q,q',qs') . -- (true):Bool
+close
+
+
+open ISTEP . --> q:start,q'brake
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq loc(q,s) = start .
+   eq (loc(q',s) = start) = false .
+   eq loc(q',s) = brake .
+
+ eq (((q q') qs') sub ps(s)) = false .  
+   
+red istep4(q,q',qs') . -- (true):Bool
+close
+
+
+
+
+--> ✅q:~start,
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   
+
+red istep4(q,q',qs') .  -- (((((t1 * v(q,s)) + ((1/2 * (ac(loc(q,s)) * (t1 * t1))) + x(q,s))) < ((if (loc(q',s) = start) then 0 else nextx(x(q',s),v(q',s),ac(loc(q',s)),t1) fi) + (-1/2 * ((v(q,s) + (ac(loc(q,s)) * t1)) * (v(q,s) + (ac(loc(q,s)) * t1)))))) and ((x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) and (((q q') qs') sub ps(s)))) xor (true xor ((x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) and (((q q') qs') sub ps(s))))):Bool
+close
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+--> ✅q:accel,
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = accel .
+
+red istep4(q,q',qs') .  -- (((((t1 * v(q,s)) + ((1/2 * (t1 * t1)) + x(q,s))) < ((if (loc(q',s) = start) then 0 else nextx(x(q',s),v(q',s),ac(loc(q',s)),t1) fi) + (-1/2 * ((v(q,s) + t1) * (v(q,s) + t1))))) and ((x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) and (((q q') qs') sub ps(s)))) xor (true xor ((x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) and (((q q') qs') sub ps(s))))):Bool
+close
+
+--> ✅q:accel,q':start
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = accel .
+   eq loc(q',s) = start .
+
+red istep4(q,q',qs') .  -- (((((t1 * v(q,s)) + ((1/2 * (t1 * t1)) + x(q,s))) < (-1/2 * ((v(q,s) + t1) * (v(q,s) + t1)))) and ((x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) and (((q q') qs') sub ps(s)))) xor (true xor ((x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) and (((q q') qs') sub ps(s))))):Bool
+close
+
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = accel .
+   eq loc(q',s) = start .
+
+   eq (((q q') qs') sub ps(s)) = true .  -- from the induction hypothesis
+   eq (q' in ps(s)) = true . -- from the induction hypothesis 
+
+red istep4(q,q',qs') .  -- ((x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) xor (true xor ((((t1 * v(q,s)) + ((1/2 * (t1 * t1)) + x(q,s))) < (-1/2 * ((v(q,s) + t1) * (v(q,s) + t1)))) and (x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s)))))))):Bool
+red inv3(q',s) implies istep4(q,q',qs') . -- (true):Bool
+close
+
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = accel .
+   eq loc(q',s) = start .
+
+ eq (((q q') qs') sub ps(s)) = false .  
+
+red istep4(q,q',qs') .  -- (true):Bool
+close
+
+
+--> ✅q:accel,q': not start
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = accel .
+   eq (loc(q',s) = start) = false .
+red istep4(q,q',qs') .  -- (((((t1 * v(q,s)) + ((1/2 * (t1 * t1)) + x(q,s))) < ((-1/2 * ((v(q,s) + t1) * (v(q,s) + t1))) + ((t1 * v(q',s)) + ((1/2 * (ac(loc(q',s)) * (t1 * t1))) + x(q',s))))) and ((x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) and (((q q') qs') sub ps(s)))) xor (true xor ((x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) and (((q q') qs') sub ps(s))))):Bool
+close
+
+
+
+--> ✅q:accel,q': accel
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = accel .
+   eq (loc(q',s) = start) = false .
+   eq loc(q',s) = accel .
+
+red istep4(q,q',qs') . -- (((((t1 * v(q,s)) + ((1/2 * (t1 * t1)) + x(q,s))) < ((-1/2 * ((v(q,s) + t1) * (v(q,s) + t1))) + ((t1 * v(q',s)) + ((1/2 * (t1 * t1)) + x(q',s))))) and ((x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) and (((q q') qs') sub ps(s)))) xor (true xor ((x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) and (((q q') qs') sub ps(s))))):Bool  
+
+close
+
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = accel .
+   eq (loc(q',s) = start) = false .
+   eq loc(q',s) = accel .
+
+  -- eq c-tick(q q' qs',t1,s) = true .
+eq ((t1 + v(q',s)) <= 4) = true .
+eq (0 <= (t1 + v(q',s))) = true .
+eq (0 <= (t1 + v(q,s))) = true .
+eq ((t1 + v(q,s)) <= 4) = true .
+eq c-tick((q' qs'),t1,s) = true .
+eq ((8 + (x(q,s) + ((v(q,s) * t1) + (1/2 * (t1 * t1))))) < ((1/2 * (t1 * t1)) + (x(q',s) + (t1 * v(q',s))))) = true .
+
+red istep4(q,q',qs') . -- (((((t1 * v(q,s)) + ((1/2 * (t1 * t1)) + x(q,s))) < ((-1/2 * ((v(q,s) + t1) * (v(q,s) + t1))) + ((t1 * v(q',s)) + ((1/2 * (t1 * t1)) + x(q',s))))) and ((x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) and (((q q') qs') sub ps(s)))) xor (true xor ((x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) and (((q q') qs') sub ps(s))))):Bool
+
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = accel .
+   eq (loc(q',s) = start) = false .
+   eq loc(q',s) = accel .
+
+  -- eq c-tick(q q' qs',t1,s) = true .
+eq ((t1 + v(q',s)) <= 4) = true .
+eq (0 <= (t1 + v(q',s))) = true .
+eq (0 <= (t1 + v(q,s))) = true .
+eq ((t1 + v(q,s)) <= 4) = true .
+eq c-tick((q' qs'),t1,s) = true .
+eq ((8 + (x(q,s) + ((v(q,s) * t1) + (1/2 * (t1 * t1))))) < ((1/2 * (t1 * t1)) + (x(q',s) + (t1 * v(q',s))))) = true .
+
+eq (((t1 * v(q,s)) + ((1/2 * (t1 * t1)) + x(q,s))) < ((-1/2 * ((v(q,s) + t1) * (v(q,s) + t1))) + ((t1 * v(q',s)) + ((1/2 * (t1 * t1)) + x(q',s))))) = true .
+
+red istep4(q,q',qs') . -- (true):Bool
+close
+
+
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = accel .
+   eq (loc(q',s) = start) = false .
+   eq loc(q',s) = accel .
+
+  -- eq c-tick(q q' qs',t1,s) = true .
+eq ((t1 + v(q',s)) <= 4) = true .
+eq (0 <= (t1 + v(q',s))) = true .
+eq (0 <= (t1 + v(q,s))) = true .
+eq ((t1 + v(q,s)) <= 4) = true .
+eq c-tick((q' qs'),t1,s) = true .
+eq ((8 + (x(q,s) + ((v(q,s) * t1) + (1/2 * (t1 * t1))))) < ((1/2 * (t1 * t1)) + (x(q',s) + (t1 * v(q',s))))) = true .
+
+eq (((t1 * v(q,s)) + ((1/2 * (t1 * t1)) + x(q,s))) < ((-1/2 * ((v(q,s) + t1) * (v(q,s) + t1))) + ((t1 * v(q',s)) + ((1/2 * (t1 * t1)) + x(q',s))))) = false .
+
+red istep4(q,q',qs') . -- (true xor ((x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) and (((q q') qs') sub ps(s)))):Bool
+
+
+
+close
+
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = accel .
+   eq (loc(q',s) = start) = false .
+   eq loc(q',s) = accel .
+
+  -- eq c-tick(q q' qs',t1,s) = true .
+eq ((t1 + v(q',s)) <= 4) = true .
+eq (0 <= (t1 + v(q',s))) = true .
+eq (0 <= (t1 + v(q,s))) = true .
+eq ((t1 + v(q,s)) <= 4) = true .
+eq c-tick((q' qs'),t1,s) = true .
+eq ((8 + (x(q,s) + ((v(q,s) * t1) + (1/2 * (t1 * t1))))) < ((1/2 * (t1 * t1)) + (x(q',s) + (t1 * v(q',s))))) = true .
+
+eq (((t1 * v(q,s)) + ((1/2 * (t1 * t1)) + x(q,s))) < ((-1/2 * ((v(q,s) + t1) * (v(q,s) + t1))) + ((t1 * v(q',s)) + ((1/2 * (t1 * t1)) + x(q',s))))) = false .
+
+eq (x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) = true .
+
+red istep4(q,q',qs') . -- (true xor (((q q') qs') sub ps(s))):Bool
+
+
+
+close
+
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = accel .
+   eq (loc(q',s) = start) = false .
+   eq loc(q',s) = accel .
+
+  -- eq c-tick(q q' qs',t1,s) = true .
+eq ((t1 + v(q',s)) <= 4) = true .
+eq (0 <= (t1 + v(q',s))) = true .
+eq (0 <= (t1 + v(q,s))) = true .
+eq ((t1 + v(q,s)) <= 4) = true .
+eq c-tick((q' qs'),t1,s) = true .
+eq ((8 + (x(q,s) + ((v(q,s) * t1) + (1/2 * (t1 * t1))))) < ((1/2 * (t1 * t1)) + (x(q',s) + (t1 * v(q',s))))) = true .
+
+ eq (((t1 * v(q,s)) + ((1/2 * (t1 * t1)) + x(q,s))) < ((-1/2 * ((v(q,s) + t1) * (v(q,s) + t1))) + ((t1 * v(q',s)) + ((1/2 * (t1 * t1)) + x(q',s))))) = false .
+
+eq (x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) = true .
+
+eq (((q q') qs') sub ps(s)) = true .
+
+red istep4(q,q',qs') . -- (false):Bool🔴
+
+close
+
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = accel .
+   eq (loc(q',s) = start) = false .
+   eq loc(q',s) = accel .
+
+  -- eq c-tick(q q' qs',t1,s) = true .
+eq ((t1 + v(q',s)) <= 4) = true .
+eq (0 <= (t1 + v(q',s))) = true .
+eq (0 <= (t1 + v(q,s))) = true .
+eq ((t1 + v(q,s)) <= 4) = true .
+eq c-tick((q' qs'),t1,s) = true .
+eq ((8 + (x(q,s) + ((v(q,s) * t1) + (1/2 * (t1 * t1))))) < ((1/2 * (t1 * t1)) + (x(q',s) + (t1 * v(q',s))))) = true .
+
+-- eq (((t1 * v(q,s)) + ((1/2 * (t1 * t1)) + x(q,s))) < ((-1/2 * ((v(q,s) + t1) * (v(q,s) + t1))) + ((t1 * v(q',s)) + ((1/2 * (t1 * t1)) + x(q',s))))) = false .
+
+eq (x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) = true .
+
+eq (((q q') qs') sub ps(s)) = true .
+
+ceq ((x(q,s) + ((t1 * v(q,s)) + (1/2 * (t1 * t1)))) < (x(q',s) + ((-1/2 * ((v(q,s) + t1) * (v(q,s) + t1))) + ((1/2 * (t1 * t1)) + (t1 * v(q',s)))))) = true if ((8 + (x(q,s) + ((v(q,s) * t1) + (1/2 * (t1 * t1))))) < ((1/2 * (t1 * t1)) + (x(q',s) + (t1 * v(q',s))))) = true . -- lemma3
+
+red istep4(q,q',qs') . -- (true):Bool🟢
+
+close
+
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = accel .
+   eq (loc(q',s) = start) = false .
+   eq loc(q',s) = accel .
+
+  -- eq c-tick(q q' qs',t1,s) = true .
+eq ((t1 + v(q',s)) <= 4) = true .
+eq (0 <= (t1 + v(q',s))) = true .
+eq (0 <= (t1 + v(q,s))) = true .
+eq ((t1 + v(q,s)) <= 4) = true .
+eq c-tick((q' qs'),t1,s) = true .
+eq ((8 + (x(q,s) + ((v(q,s) * t1) + (1/2 * (t1 * t1))))) < ((1/2 * (t1 * t1)) + (x(q',s) + (t1 * v(q',s))))) = true .
+
+eq (((t1 * v(q,s)) + ((1/2 * (t1 * t1)) + x(q,s))) < ((-1/2 * ((v(q,s) + t1) * (v(q,s) + t1))) + ((t1 * v(q',s)) + ((1/2 * (t1 * t1)) + x(q',s))))) = false .
+
+eq (x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) = true .
+
+eq (((q q') qs') sub ps(s)) = false .
+
+red istep4(q,q',qs') . -- (true):Bool
+
+
+
+close
+
+
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = accel .
+   eq (loc(q',s) = start) = false .
+   eq loc(q',s) = accel .
+
+  -- eq c-tick(q q' qs',t1,s) = true .
+eq ((t1 + v(q',s)) <= 4) = true .
+eq (0 <= (t1 + v(q',s))) = true .
+eq (0 <= (t1 + v(q,s))) = true .
+eq ((t1 + v(q,s)) <= 4) = true .
+eq c-tick((q' qs'),t1,s) = true .
+eq ((8 + (x(q,s) + ((v(q,s) * t1) + (1/2 * (t1 * t1))))) < ((1/2 * (t1 * t1)) + (x(q',s) + (t1 * v(q',s))))) = true .
+
+eq (((t1 * v(q,s)) + ((1/2 * (t1 * t1)) + x(q,s))) < ((-1/2 * ((v(q,s) + t1) * (v(q,s) + t1))) + ((t1 * v(q',s)) + ((1/2 * (t1 * t1)) + x(q',s))))) = false .
+
+eq (x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) = false .
+
+red istep4(q,q',qs') . -- (true):Bool
+
+
+
+close
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+--> ✅q:accel,q': nothing
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = accel .
+   eq loc(q',s) = nothing .
+
+red istep4(q,q',qs') .  -- (((((t1 * v(q,s)) + ((1/2 * (t1 * t1)) + x(q,s))) < ((-1/2 * ((v(q,s) + t1) * (v(q,s) + t1))) + ((t1 * v(q',s)) + x(q',s)))) and ((x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) and (((q q') qs') sub ps(s)))) xor (true xor ((x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) and (((q q') qs') sub ps(s))))):Bool
+close
+
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = accel .
+   eq loc(q',s) = nothing .
+
+-- c-tick(q q' qs',t1,s) = true .
+     eq (v(q',s) <= 4) = true .
+     eq (0 <= v(q',s)) = true .
+     eq ((8 + (x(q,s) + ((v(q,s) * t1) + (1/2 * (t1 * t1))))) < (x(q',s) + (t1 * v(q',s)))) = true .
+     eq (0 <= (t1 + v(q,s))) = true .
+     eq ((t1 + v(q,s)) <= 4) = true .
+     eq c-tick((q' qs'),t1,s) = true .
+
+red istep4(q,q',qs') . -- (((((t1 * v(q,s)) + ((1/2 * (t1 * t1)) + x(q,s))) < ((-1/2 * ((v(q,s) + t1) * (v(q,s) + t1))) + ((t1 * v(q',s)) + x(q',s)))) and ((x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) and (((q q') qs') sub ps(s)))) xor (true xor ((x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) and (((q q') qs') sub ps(s))))):Bool
+
+close
+
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = accel .
+   eq loc(q',s) = nothing .
+
+-- c-tick(q q' qs',t1,s) = true .
+     eq (v(q',s) <= 4) = true .
+     eq (0 <= v(q',s)) = true .
+     eq ((8 + (x(q,s) + ((v(q,s) * t1) + (1/2 * (t1 * t1))))) < (x(q',s) + (t1 * v(q',s)))) = true .
+     eq (0 <= (t1 + v(q,s))) = true .
+     eq ((t1 + v(q,s)) <= 4) = true .
+     eq c-tick((q' qs'),t1,s) = true .
+
+     eq (((t1 * v(q,s)) + ((1/2 * (t1 * t1)) + x(q,s))) < ((-1/2 * ((v(q,s) + t1) * (v(q,s) + t1))) + ((t1 * v(q',s)) + x(q',s)))) = true .
+
+red istep4(q,q',qs') . -- (true):Bool
+
+close
+
+
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = accel .
+   eq loc(q',s) = nothing .
+
+-- c-tick(q q' qs',t1,s) = true .
+     eq (v(q',s) <= 4) = true .
+     eq (0 <= v(q',s)) = true .
+     eq ((8 + (x(q,s) + ((v(q,s) * t1) + (1/2 * (t1 * t1))))) < (x(q',s) + (t1 * v(q',s)))) = true .
+     eq (0 <= (t1 + v(q,s))) = true .
+     eq ((t1 + v(q,s)) <= 4) = true .
+     eq c-tick((q' qs'),t1,s) = true .
+
+     eq (((t1 * v(q,s)) + ((1/2 * (t1 * t1)) + x(q,s))) < ((-1/2 * ((v(q,s) + t1) * (v(q,s) + t1))) + ((t1 * v(q',s)) + x(q',s)))) = false .
+
+red istep4(q,q',qs') . -- (true xor ((x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) and (((q q') qs') sub ps(s)))):Bool
+
+close
+
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = accel .
+   eq loc(q',s) = nothing .
+
+-- c-tick(q q' qs',t1,s) = true .
+     eq (v(q',s) <= 4) = true .
+     eq (0 <= v(q',s)) = true .
+     eq ((8 + (x(q,s) + ((v(q,s) * t1) + (1/2 * (t1 * t1))))) < (x(q',s) + (t1 * v(q',s)))) = true .
+     eq (0 <= (t1 + v(q,s))) = true .
+     eq ((t1 + v(q,s)) <= 4) = true .
+     eq c-tick((q' qs'),t1,s) = true .
+
+     eq (((t1 * v(q,s)) + ((1/2 * (t1 * t1)) + x(q,s))) < ((-1/2 * ((v(q,s) + t1) * (v(q,s) + t1))) + ((t1 * v(q',s)) + x(q',s)))) = false .
+
+     eq (x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) = true .
+
+
+red istep4(q,q',qs') . -- (true xor (((q q') qs') sub ps(s))):Bool
+
+close
+
+
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = accel .
+   eq loc(q',s) = nothing .
+
+-- c-tick(q q' qs',t1,s) = true .
+     eq (v(q',s) <= 4) = true .
+     eq (0 <= v(q',s)) = true .
+     eq ((8 + (x(q,s) + ((v(q,s) * t1) + (1/2 * (t1 * t1))))) < (x(q',s) + (t1 * v(q',s)))) = true .
+     eq (0 <= (t1 + v(q,s))) = true .
+     eq ((t1 + v(q,s)) <= 4) = true .
+     eq c-tick((q' qs'),t1,s) = true .
+
+     eq (((t1 * v(q,s)) + ((1/2 * (t1 * t1)) + x(q,s))) < ((-1/2 * ((v(q,s) + t1) * (v(q,s) + t1))) + ((t1 * v(q',s)) + x(q',s)))) = false .
+
+     eq (x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) = true .
+
+     eq (((q q') qs') sub ps(s)) = true .
+
+
+red istep4(q,q',qs') . -- (false):Bool🔴
+
+close
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = accel .
+   eq loc(q',s) = nothing .
+
+-- c-tick(q q' qs',t1,s) = true .
+     eq (v(q',s) <= 4) = true .
+     eq (0 <= v(q',s)) = true .
+     eq ((8 + (x(q,s) + ((v(q,s) * t1) + (1/2 * (t1 * t1))))) < (x(q',s) + (t1 * v(q',s)))) = true .
+     eq (0 <= (t1 + v(q,s))) = true .
+     eq ((t1 + v(q,s)) <= 4) = true .
+     eq c-tick((q' qs'),t1,s) = true .
+
+     eq (x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) = true .
+
+     eq (((q q') qs') sub ps(s)) = true .
+
+ ceq (((t1 * v(q,s)) + ((1/2 * (t1 * t1)) + x(q,s))) < ((-1/2 * ((v(q,s) + t1) * (v(q,s) + t1))) + ((t1 * v(q',s)) + x(q',s)))) = true if ((8 + (x(q,s) + ((v(q,s) * t1) + (1/2 * (t1 * t1))))) < (x(q',s) + (t1 * v(q',s)))) = true . -- lemma3
+
+red istep4(q,q',qs') . -- (true):Bool🟢
+
+close
+
+
+
+
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = accel .
+   eq loc(q',s) = nothing .
+
+-- c-tick(q q' qs',t1,s) = true .
+     eq (v(q',s) <= 4) = true .
+     eq (0 <= v(q',s)) = true .
+     eq ((8 + (x(q,s) + ((v(q,s) * t1) + (1/2 * (t1 * t1))))) < (x(q',s) + (t1 * v(q',s)))) = true .
+     eq (0 <= (t1 + v(q,s))) = true .
+     eq ((t1 + v(q,s)) <= 4) = true .
+     eq c-tick((q' qs'),t1,s) = true .
+
+     eq (((t1 * v(q,s)) + ((1/2 * (t1 * t1)) + x(q,s))) < ((-1/2 * ((v(q,s) + t1) * (v(q,s) + t1))) + ((t1 * v(q',s)) + x(q',s)))) = false .
+
+     eq (x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) = true .
+
+     eq (((q q') qs') sub ps(s)) = false .
+
+
+red istep4(q,q',qs') . -- (true):Bool
+
+close
+
+
+
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = accel .
+   eq loc(q',s) = nothing .
+
+-- c-tick(q q' qs',t1,s) = true .
+     eq (v(q',s) <= 4) = true .
+     eq (0 <= v(q',s)) = true .
+     eq ((8 + (x(q,s) + ((v(q,s) * t1) + (1/2 * (t1 * t1))))) < (x(q',s) + (t1 * v(q',s)))) = true .
+     eq (0 <= (t1 + v(q,s))) = true .
+     eq ((t1 + v(q,s)) <= 4) = true .
+     eq c-tick((q' qs'),t1,s) = true .
+
+     eq (((t1 * v(q,s)) + ((1/2 * (t1 * t1)) + x(q,s))) < ((-1/2 * ((v(q,s) + t1) * (v(q,s) + t1))) + ((t1 * v(q',s)) + x(q',s)))) = false .
+
+     eq (x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) = false .
+
+red istep4(q,q',qs') . -- (true):Bool
+
+close
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+--> ✅q:accel,q': brake
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = accel .
+   eq loc(q',s) = brake .
+
+red istep4(q,q',qs') .   -- (((((t1 * v(q,s)) + ((1/2 * (t1 * t1)) + x(q,s))) < ((-1/2 * ((v(q,s) + t1) * (v(q,s) + t1))) + ((t1 * v(q',s)) + ((-1/2 * (t1 * t1)) + x(q',s))))) and ((x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) and (((q q') qs') sub ps(s)))) xor (true xor ((x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) and (((q q') qs') sub ps(s))))):Bool
+close
+
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = accel .
+   eq loc(q',s) = brake .
+
+  -- eq c-tick(q q' qs',t1,s) = true .
+
+ eq (((-1 * t1) + v(q',s)) <= 4) = true .
+ eq (0 <= ((-1 * t1) + v(q',s))) = true .
+ eq ((8 + (x(q,s) + ((v(q,s) * t1) + (1/2 * (t1 * t1))))) < ((-1/2 * (t1 * t1)) + (x(q',s) + (v(q',s) * t1)))) = true .
+ eq (0 <= (t1 + v(q,s))) = true .
+ eq ((t1 + v(q,s)) <= 4) = true .
+ eq c-tick((q' qs'),t1,s) = true .
+
+red istep4(q,q',qs') . -- (((((t1 * v(q,s)) + ((1/2 * (t1 * t1)) + x(q,s))) < ((-1/2 * ((v(q,s) + t1) * (v(q,s) + t1))) + ((t1 * v(q',s)) + ((-1/2 * (t1 * t1)) + x(q',s))))) and ((x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) and (((q q') qs') sub ps(s)))) xor (true xor ((x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) and (((q q') qs') sub ps(s))))):Bool
+
+
+close
+
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = accel .
+   eq loc(q',s) = brake .
+
+  -- eq c-tick(q q' qs',t1,s) = true .
+
+ eq (((-1 * t1) + v(q',s)) <= 4) = true .
+ eq (0 <= ((-1 * t1) + v(q',s))) = true .
+ eq ((8 + (x(q,s) + ((v(q,s) * t1) + (1/2 * (t1 * t1))))) < ((-1/2 * (t1 * t1)) + (x(q',s) + (v(q',s) * t1)))) = true .
+ eq (0 <= (t1 + v(q,s))) = true .
+ eq ((t1 + v(q,s)) <= 4) = true .
+ eq c-tick((q' qs'),t1,s) = true .
+
+eq (((t1 * v(q,s)) + ((1/2 * (t1 * t1)) + x(q,s))) < ((-1/2 * ((v(q,s) + t1) * (v(q,s) + t1))) + ((t1 * v(q',s)) + ((-1/2 * (t1 * t1)) + x(q',s))))) = true .
+
+red istep4(q,q',qs') . -- (true):Bool
+
+
+close
+
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = accel .
+   eq loc(q',s) = brake .
+
+  -- eq c-tick(q q' qs',t1,s) = true .
+
+ eq (((-1 * t1) + v(q',s)) <= 4) = true .
+ eq (0 <= ((-1 * t1) + v(q',s))) = true .
+ eq ((8 + (x(q,s) + ((v(q,s) * t1) + (1/2 * (t1 * t1))))) < ((-1/2 * (t1 * t1)) + (x(q',s) + (v(q',s) * t1)))) = true .
+ eq (0 <= (t1 + v(q,s))) = true .
+ eq ((t1 + v(q,s)) <= 4) = true .
+ eq c-tick((q' qs'),t1,s) = true .
+
+eq (((t1 * v(q,s)) + ((1/2 * (t1 * t1)) + x(q,s))) < ((-1/2 * ((v(q,s) + t1) * (v(q,s) + t1))) + ((t1 * v(q',s)) + ((-1/2 * (t1 * t1)) + x(q',s))))) = false .
+
+red istep4(q,q',qs') . -- (true xor ((x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) and (((q q') qs') sub ps(s)))):Bool
+
+
+close
+
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = accel .
+   eq loc(q',s) = brake .
+
+  -- eq c-tick(q q' qs',t1,s) = true .
+
+ eq (((-1 * t1) + v(q',s)) <= 4) = true .
+ eq (0 <= ((-1 * t1) + v(q',s))) = true .
+ eq ((8 + (x(q,s) + ((v(q,s) * t1) + (1/2 * (t1 * t1))))) < ((-1/2 * (t1 * t1)) + (x(q',s) + (v(q',s) * t1)))) = true .
+ eq (0 <= (t1 + v(q,s))) = true .
+ eq ((t1 + v(q,s)) <= 4) = true .
+ eq c-tick((q' qs'),t1,s) = true .
+
+eq (((t1 * v(q,s)) + ((1/2 * (t1 * t1)) + x(q,s))) < ((-1/2 * ((v(q,s) + t1) * (v(q,s) + t1))) + ((t1 * v(q',s)) + ((-1/2 * (t1 * t1)) + x(q',s))))) = false .
+
+eq (x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) = true .
+
+red istep4(q,q',qs') . -- (true xor (((q q') qs') sub ps(s))):Bool
+
+
+close
+
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = accel .
+   eq loc(q',s) = brake .
+
+  -- eq c-tick(q q' qs',t1,s) = true .
+
+ eq (((-1 * t1) + v(q',s)) <= 4) = true .
+ eq (0 <= ((-1 * t1) + v(q',s))) = true .
+ eq ((8 + (x(q,s) + ((v(q,s) * t1) + (1/2 * (t1 * t1))))) < ((-1/2 * (t1 * t1)) + (x(q',s) + (v(q',s) * t1)))) = true .
+ eq (0 <= (t1 + v(q,s))) = true .
+ eq ((t1 + v(q,s)) <= 4) = true .
+ eq c-tick((q' qs'),t1,s) = true .
+
+eq (((t1 * v(q,s)) + ((1/2 * (t1 * t1)) + x(q,s))) < ((-1/2 * ((v(q,s) + t1) * (v(q,s) + t1))) + ((t1 * v(q',s)) + ((-1/2 * (t1 * t1)) + x(q',s))))) = false .
+
+eq (x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) = true .
+
+eq (((q q') qs') sub ps(s)) = true .
+
+red istep4(q,q',qs') . -- (false):Bool🔴
+
+
+close
+
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = accel .
+   eq loc(q',s) = brake .
+
+  -- eq c-tick(q q' qs',t1,s) = true .
+
+ eq (((-1 * t1) + v(q',s)) <= 4) = true .
+ eq (0 <= ((-1 * t1) + v(q',s))) = true .
+ eq ((8 + (x(q,s) + ((v(q,s) * t1) + (1/2 * (t1 * t1))))) < ((-1/2 * (t1 * t1)) + (x(q',s) + (v(q',s) * t1)))) = true .
+ eq (0 <= (t1 + v(q,s))) = true .
+ eq ((t1 + v(q,s)) <= 4) = true .
+ eq c-tick((q' qs'),t1,s) = true .
+
+-- eq (((t1 * v(q,s)) + ((1/2 * (t1 * t1)) + x(q,s))) < ((-1/2 * ((v(q,s) + t1) * (v(q,s) + t1))) + ((t1 * v(q',s)) + ((-1/2 * (t1 * t1)) + x(q',s))))) = false .
+
+eq (x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) = true .
+
+eq (((q q') qs') sub ps(s)) = true .
+ ceq (((t1 * v(q,s)) + ((1/2 * (t1 * t1)) + x(q,s))) < ((-1/2 * ((v(q,s) + t1) * (v(q,s) + t1))) + ((t1 * v(q',s)) + ((-1/2 * (t1 * t1)) + x(q',s))))) = true if ((8 + (x(q,s) + ((v(q,s) * t1) + (1/2 * (t1 * t1))))) < ((-1/2 * (t1 * t1)) + (x(q',s) + (v(q',s) * t1)))) = true . -- lemma3
+
+
+red istep4(q,q',qs') . -- (true):Bool🟢
+
+
+close
+
+
+
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = accel .
+   eq loc(q',s) = brake .
+
+  -- eq c-tick(q q' qs',t1,s) = true .
+
+ eq (((-1 * t1) + v(q',s)) <= 4) = true .
+ eq (0 <= ((-1 * t1) + v(q',s))) = true .
+ eq ((8 + (x(q,s) + ((v(q,s) * t1) + (1/2 * (t1 * t1))))) < ((-1/2 * (t1 * t1)) + (x(q',s) + (v(q',s) * t1)))) = true .
+ eq (0 <= (t1 + v(q,s))) = true .
+ eq ((t1 + v(q,s)) <= 4) = true .
+ eq c-tick((q' qs'),t1,s) = true .
+
+eq (((t1 * v(q,s)) + ((1/2 * (t1 * t1)) + x(q,s))) < ((-1/2 * ((v(q,s) + t1) * (v(q,s) + t1))) + ((t1 * v(q',s)) + ((-1/2 * (t1 * t1)) + x(q',s))))) = false .
+
+eq (x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) = true .
+
+eq (((q q') qs') sub ps(s)) = false .
+
+red istep4(q,q',qs') . -- (true):Bool
+
+
+close
+
+
+
+
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = accel .
+   eq loc(q',s) = brake .
+
+  -- eq c-tick(q q' qs',t1,s) = true .
+
+ eq (((-1 * t1) + v(q',s)) <= 4) = true .
+ eq (0 <= ((-1 * t1) + v(q',s))) = true .
+ eq ((8 + (x(q,s) + ((v(q,s) * t1) + (1/2 * (t1 * t1))))) < ((-1/2 * (t1 * t1)) + (x(q',s) + (v(q',s) * t1)))) = true .
+ eq (0 <= (t1 + v(q,s))) = true .
+ eq ((t1 + v(q,s)) <= 4) = true .
+ eq c-tick((q' qs'),t1,s) = true .
+
+eq (((t1 * v(q,s)) + ((1/2 * (t1 * t1)) + x(q,s))) < ((-1/2 * ((v(q,s) + t1) * (v(q,s) + t1))) + ((t1 * v(q',s)) + ((-1/2 * (t1 * t1)) + x(q',s))))) = false .
+
+eq (x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) = false .
+
+red istep4(q,q',qs') . -- (true):Bool
+
+
+close
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+--> ✅q:nothing,
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = nothing .
+
+red istep4(q,q',qs') .   -- ((((x(q,s) + (t1 * v(q,s))) < ((if (loc(q',s) = start) then 0 else nextx(x(q',s),v(q',s),ac(loc(q',s)),t1) fi) + (-1/2 * (v(q,s) * v(q,s))))) and ((x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) and (((q q') qs') sub ps(s)))) xor (true xor ((x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) and (((q q') qs') sub ps(s))))):Bool
+close
+
+--> ✅q:nothing,q'start
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = nothing .
+   eq loc(q',s) = start .
+
+red istep4(q,q',qs') .   -- ((((x(q,s) + (t1 * v(q,s))) < (-1/2 * (v(q,s) * v(q,s)))) and ((x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) and (((q q') qs') sub ps(s)))) xor (true xor ((x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) and (((q q') qs') sub ps(s))))):Bool
+close
+
+--> ✅q:nothing,q'start
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = nothing .
+   eq loc(q',s) = start .
+
+   eq (((q q') qs') sub ps(s)) = true .  -- from the induction hypothesis
+   eq (q' in ps(s)) = true . -- from the induction hypothesis 
+
+red istep4(q,q',qs') .   -- ((x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) xor (true xor (((x(q,s) + (t1 * v(q,s))) < (-1/2 * (v(q,s) * v(q,s)))) and (x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s)))))))):Bool
+red inv3(q',s) implies istep4(q,q',qs') . -- (true):Bool
+close
+
+
+--> ✅q:nothing,q'start
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = nothing .
+   eq loc(q',s) = start .
+
+ eq (((q q') qs') sub ps(s)) = false .  
+
+red istep4(q,q',qs') .   -- (true):Bool
+close
+
+
+
+
+
+
+
+
+
+
+--> ✅q:nothing,q' not start
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = nothing .
+   eq (loc(q',s) = start) = false .
+
+red istep4(q,q',qs') .   -- ((((x(q,s) + (t1 * v(q,s))) < ((-1/2 * (v(q,s) * v(q,s))) + ((t1 * v(q',s)) + ((1/2 * (ac(loc(q',s)) * (t1 * t1))) + x(q',s))))) and ((x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) and (((q q') qs') sub ps(s)))) xor (true xor ((x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) and (((q q') qs') sub ps(s))))):Bool
+close
+
+--> ✅q:nothing,q' accel
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = nothing .
+   eq (loc(q',s) = start) = false .
+   eq loc(q',s) = accel .
+
+red istep4(q,q',qs') .   -- ((((x(q,s) + (t1 * v(q,s))) < ((-1/2 * (v(q,s) * v(q,s))) + ((t1 * v(q',s)) + ((1/2 * (t1 * t1)) + x(q',s))))) and ((x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) and (((q q') qs') sub ps(s)))) xor (true xor ((x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) and (((q q') qs') sub ps(s))))):Bool
+close
+
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = nothing .
+   eq (loc(q',s) = start) = false .
+   eq loc(q',s) = accel .
+
+ 
+ -- eq c-tick(q q' qs',t1,s) = true .
+
+ eq v(q,s) = 0 .
+ eq ((t1 + v(q',s)) <= 4) = true . 
+ eq (0 <= v(q,s)) = true . 
+ eq (v(q,s) <= 4) = true . 
+ eq (0 <= (t1 + v(q',s))) = true . 
+ eq c-tick((q' qs'),t1,s) = true .
+
+red istep4(q,q',qs') .   -- (((x(q,s) < ((1/2 * (t1 * t1)) + (x(q',s) + (v(q',s) * t1)))) and ((x(q,s) < x(q',s)) and (((q q') qs') sub ps(s)))) xor (true xor ((x(q,s) < x(q',s)) and (((q q') qs') sub ps(s))))):Bool
+close
+
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = nothing .
+   eq (loc(q',s) = start) = false .
+   eq loc(q',s) = accel .
+
+ 
+ -- eq c-tick(q q' qs',t1,s) = true .
+
+ eq v(q,s) = 0 .
+ eq ((t1 + v(q',s)) <= 4) = true . 
+ eq (0 <= v(q,s)) = true . 
+ eq (v(q,s) <= 4) = true . 
+ eq (0 <= (t1 + v(q',s))) = true . 
+ eq c-tick((q' qs'),t1,s) = true .
+
+ eq (x(q,s) < ((1/2 * (t1 * t1)) + (x(q',s) + (v(q',s) * t1)))) = true .
+
+red istep4(q,q',qs') .   -- (true):Bool
+close
+
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = nothing .
+   eq (loc(q',s) = start) = false .
+   eq loc(q',s) = accel .
+
+ 
+ -- eq c-tick(q q' qs',t1,s) = true .
+
+ eq v(q,s) = 0 .
+ eq ((t1 + v(q',s)) <= 4) = true . 
+ eq (0 <= v(q,s)) = true . 
+ eq (v(q,s) <= 4) = true . 
+ eq (0 <= (t1 + v(q',s))) = true . 
+ eq c-tick((q' qs'),t1,s) = true .
+
+ eq (x(q,s) < ((1/2 * (t1 * t1)) + (x(q',s) + (v(q',s) * t1)))) = false .
+
+red istep4(q,q',qs') .   -- (true xor ((x(q,s) < x(q',s)) and (((q q') qs') sub ps(s)))):Bool
+
+
+
+
+close
+
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = nothing .
+   eq (loc(q',s) = start) = false .
+   eq loc(q',s) = accel .
+
+ 
+ -- eq c-tick(q q' qs',t1,s) = true .
+
+ eq v(q,s) = 0 .
+ eq ((t1 + v(q',s)) <= 4) = true . 
+ eq (0 <= v(q,s)) = true . 
+ eq (v(q,s) <= 4) = true . 
+ eq (0 <= (t1 + v(q',s))) = true . 
+ eq c-tick((q' qs'),t1,s) = true .
+
+ eq (x(q,s) < ((1/2 * (t1 * t1)) + (x(q',s) + (v(q',s) * t1)))) = false .
+
+ eq (x(q,s) < x(q',s)) = true .
+
+red istep4(q,q',qs') .   -- (true xor (((q q') qs') sub ps(s))):Bool
+
+
+
+
+close
+
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = nothing .
+   eq (loc(q',s) = start) = false .
+   eq loc(q',s) = accel .
+
+ 
+ -- eq c-tick(q q' qs',t1,s) = true .
+
+ eq v(q,s) = 0 .
+ eq ((t1 + v(q',s)) <= 4) = true . 
+ eq (0 <= v(q,s)) = true . 
+ eq (v(q,s) <= 4) = true . 
+ eq (0 <= (t1 + v(q',s))) = true . 
+ eq c-tick((q' qs'),t1,s) = true .
+
+ eq (x(q,s) < ((1/2 * (t1 * t1)) + (x(q',s) + (v(q',s) * t1)))) = false .
+
+ eq (x(q,s) < x(q',s)) = true .
+
+  eq (((q q') qs') sub ps(s)) = true .
+
+
+
+red istep4(q,q',qs') .   -- (false):Bool🔴
+
+close
+
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = nothing .
+   eq (loc(q',s) = start) = false .
+   eq loc(q',s) = accel .
+
+ 
+ -- eq c-tick(q q' qs',t1,s) = true .
+
+ eq v(q,s) = 0 .
+ eq ((t1 + v(q',s)) <= 4) = true . 
+ eq (0 <= v(q,s)) = true . 
+ eq (v(q,s) <= 4) = true . 
+ eq (0 <= (t1 + v(q',s))) = true . 
+ eq c-tick((q' qs'),t1,s) = true .
+
+ -- eq (x(q,s) < ((1/2 * (t1 * t1)) + (x(q',s) + (v(q',s) * t1)))) = false .
+
+ eq (x(q,s) < x(q',s)) = true .
+
+--  eq (((q q') qs') sub ps(s)) = true .
+ceq (x(q,s) < (x(q',s) + ((t1 * v(q',s)) + (1/2 * (t1 * t1))))) = true if (x(q,s) < x(q',s)) . -- lemma1
+
+red istep4(q,q',qs') .   -- (true):Bool🟢
+close
+
+
+
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = nothing .
+   eq (loc(q',s) = start) = false .
+   eq loc(q',s) = accel .
+
+ 
+ -- eq c-tick(q q' qs',t1,s) = true .
+
+ eq v(q,s) = 0 .
+ eq ((t1 + v(q',s)) <= 4) = true . 
+ eq (0 <= v(q,s)) = true . 
+ eq (v(q,s) <= 4) = true . 
+ eq (0 <= (t1 + v(q',s))) = true . 
+ eq c-tick((q' qs'),t1,s) = true .
+
+ eq (x(q,s) < ((1/2 * (t1 * t1)) + (x(q',s) + (v(q',s) * t1)))) = false .
+
+ eq (x(q,s) < x(q',s)) = true .
+
+  eq (((q q') qs') sub ps(s)) = false .
+
+red istep4(q,q',qs') .   -- (true):Bool
+
+
+
+
+close
+
+
+
+
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = nothing .
+   eq (loc(q',s) = start) = false .
+   eq loc(q',s) = accel .
+
+ 
+ -- eq c-tick(q q' qs',t1,s) = true .
+
+ eq v(q,s) = 0 .
+ eq ((t1 + v(q',s)) <= 4) = true . 
+ eq (0 <= v(q,s)) = true . 
+ eq (v(q,s) <= 4) = true . 
+ eq (0 <= (t1 + v(q',s))) = true . 
+ eq c-tick((q' qs'),t1,s) = true .
+
+ eq (x(q,s) < ((1/2 * (t1 * t1)) + (x(q',s) + (v(q',s) * t1)))) = false .
+
+ eq (x(q,s) < x(q',s)) = false .
+
+red istep4(q,q',qs') .   -- (true):Bool
+
+
+
+
+close
+
+
+
+
+
+
+--> ✅q:nothing,q' nothing
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = nothing .
+   eq (loc(q',s) = start) = false .
+   eq loc(q',s) = nothing .
+
+red istep4(q,q',qs') .   -- ((((x(q,s) + (t1 * v(q,s))) < ((-1/2 * (v(q,s) * v(q,s))) + ((t1 * v(q',s)) + x(q',s)))) and ((x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) and (((q q') qs') sub ps(s)))) xor (true xor ((x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) and (((q q') qs') sub ps(s))))):Bool
+close
+
+--> ✅q:nothing,q' nothing
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = nothing .
+   eq (loc(q',s) = start) = false .
+   eq loc(q',s) = nothing .
+-- c-tick(q q' qs',t1,s) = true .  
+eq v(q,s) = 0 . 
+eq (v(q',s) <= 4) = true . 
+eq (0 <= v(q,s)) = true . 
+eq (v(q,s) <= 4) = true . 
+eq (0 <= v(q',s)) = true . 
+eq c-tick((q' qs'),t1,s) = true . 
+
+red istep4(q,q',qs') .   -- (((x(q,s) < ((v(q',s) * t1) + x(q',s))) and ((x(q,s) < x(q',s)) and (((q q') qs') sub ps(s)))) xor (true xor ((x(q,s) < x(q',s)) and (((q q') qs') sub ps(s))))):Bool
+close
+--> 20240131✅🔴🟢🌈🟡🟠🔵🟣
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = nothing .
+   eq (loc(q',s) = start) = false .
+   eq loc(q',s) = nothing .
+-- c-tick(q q' qs',t1,s) = true .  
+eq v(q,s) = 0 . 
+eq (v(q',s) <= 4) = true . 
+eq (0 <= v(q,s)) = true . 
+eq (v(q,s) <= 4) = true . 
+eq (0 <= v(q',s)) = true . 
+eq c-tick((q' qs'),t1,s) = true . 
+
+eq (x(q,s) < ((v(q',s) * t1) + x(q',s))) = true .
+
+red istep4(q,q',qs') .   -- (true):Bool
+close
+
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = nothing .
+   eq (loc(q',s) = start) = false .
+   eq loc(q',s) = nothing .
+-- c-tick(q q' qs',t1,s) = true .  
+eq v(q,s) = 0 . 
+eq (v(q',s) <= 4) = true . 
+eq (0 <= v(q,s)) = true . 
+eq (v(q,s) <= 4) = true . 
+eq (0 <= v(q',s)) = true . 
+eq c-tick((q' qs'),t1,s) = true . 
+
+eq (x(q,s) < ((v(q',s) * t1) + x(q',s))) = false .
+
+red istep4(q,q',qs') .   -- (true xor ((x(q,s) < x(q',s)) and (((q q') qs') sub ps(s)))):Bool
+close
+
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = nothing .
+   eq (loc(q',s) = start) = false .
+   eq loc(q',s) = nothing .
+-- c-tick(q q' qs',t1,s) = true .  
+eq v(q,s) = 0 . 
+eq (v(q',s) <= 4) = true . 
+eq (0 <= v(q,s)) = true . 
+eq (v(q,s) <= 4) = true . 
+eq (0 <= v(q',s)) = true . 
+eq c-tick((q' qs'),t1,s) = true . 
+
+eq (x(q,s) < ((v(q',s) * t1) + x(q',s))) = false .
+
+eq (x(q,s) < x(q',s)) = true .
+
+red istep4(q,q',qs') .   -- (true xor (((q q') qs') sub ps(s))):Bool
+close
+
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = nothing .
+   eq (loc(q',s) = start) = false .
+   eq loc(q',s) = nothing .
+-- c-tick(q q' qs',t1,s) = true .  
+eq v(q,s) = 0 . 
+eq (v(q',s) <= 4) = true . 
+eq (0 <= v(q,s)) = true . 
+eq (v(q,s) <= 4) = true . 
+eq (0 <= v(q',s)) = true . 
+eq c-tick((q' qs'),t1,s) = true . 
+
+eq (x(q,s) < ((v(q',s) * t1) + x(q',s))) = false .
+
+eq (x(q,s) < x(q',s)) = true .
+
+eq (((q q') qs') sub ps(s)) = true .
+
+red istep4(q,q',qs') .   -- (false):Bool🔴
+close
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = nothing .
+   eq (loc(q',s) = start) = false .
+   eq loc(q',s) = nothing .
+-- c-tick(q q' qs',t1,s) = true .  
+eq v(q,s) = 0 . 
+eq (v(q',s) <= 4) = true . 
+eq (0 <= v(q,s)) = true . 
+eq (v(q,s) <= 4) = true . 
+eq (0 <= v(q',s)) = true . 
+eq c-tick((q' qs'),t1,s) = true . 
+
+eq (x(q,s) < x(q',s)) = true .
+
+ceq (x(q,s) < (x(q',s) + (t1 * v(q',s)))) = true if (x(q,s) < x(q',s)) . -- lemma1
+
+red istep4(q,q',qs') .   -- (true):Bool🟢
+close
+
+
+
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = nothing .
+   eq (loc(q',s) = start) = false .
+   eq loc(q',s) = nothing .
+-- c-tick(q q' qs',t1,s) = true .  
+eq v(q,s) = 0 . 
+eq (v(q',s) <= 4) = true . 
+eq (0 <= v(q,s)) = true . 
+eq (v(q,s) <= 4) = true . 
+eq (0 <= v(q',s)) = true . 
+eq c-tick((q' qs'),t1,s) = true . 
+
+eq (x(q,s) < ((v(q',s) * t1) + x(q',s))) = false .
+
+eq (x(q,s) < x(q',s)) = true .
+
+eq (((q q') qs') sub ps(s)) = false .
+
+red istep4(q,q',qs') .   -- (true):Bool
+close
+
+
+
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = nothing .
+   eq (loc(q',s) = start) = false .
+   eq loc(q',s) = nothing .
+-- c-tick(q q' qs',t1,s) = true .  
+eq v(q,s) = 0 . 
+eq (v(q',s) <= 4) = true . 
+eq (0 <= v(q,s)) = true . 
+eq (v(q,s) <= 4) = true . 
+eq (0 <= v(q',s)) = true . 
+eq c-tick((q' qs'),t1,s) = true . 
+
+eq (x(q,s) < ((v(q',s) * t1) + x(q',s))) = false .
+
+eq (x(q,s) < x(q',s)) = false .
+
+red istep4(q,q',qs') .   -- (true):Bool
+close
+
+
+
+--> 20240131✅🔴🟢🌈🟡🟠🔵🟣
+--> ✅q:nothing,q' nothing
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = nothing .
+   eq (loc(q',s) = start) = false .
+   eq loc(q',s) = nothing .
+-- c-tick(q q' qs',t1,s) = true .  
+eq v(q,s) = 0 . 
+eq (v(q',s) <= 4) = true . 
+eq (0 <= v(q,s)) = true . 
+eq (v(q,s) <= 4) = true . 
+eq (0 <= v(q',s)) = true . 
+eq c-tick((q' qs'),t1,s) = true . 
+
+eq (x(q,s) < x(q',s)) = true .
+
+red istep4(q,q',qs') .   -- (true):Bool
+close
+
+
+--> ✅q:nothing,q' nothing
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = nothing .
+   eq (loc(q',s) = start) = false .
+   eq loc(q',s) = nothing .
+-- c-tick(q q' qs',t1,s) = true .  
+eq v(q,s) = 0 . 
+eq (v(q',s) <= 4) = true . 
+eq (0 <= v(q,s)) = true . 
+eq (v(q,s) <= 4) = true . 
+eq (0 <= v(q',s)) = true . 
+eq c-tick((q' qs'),t1,s) = true . 
+
+eq (x(q,s) < x(q',s)) = false .
+
+red istep4(q,q',qs') .   -- (true):Bool
+close
+
+--> 20240131✅🔴🟢🌈🟡🟠🔵🟣
+
+
+--> ✅q:nothing,q' brake
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = nothing .
+   eq (loc(q',s) = start) = false .
+   eq loc(q',s) = brake .
+
+red istep4(q,q',qs') .   -- ((((x(q,s) + (t1 * v(q,s))) < ((-1/2 * (v(q,s) * v(q,s))) + ((t1 * v(q',s)) + ((-1/2 * (t1 * t1)) + x(q',s))))) and ((x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) and (((q q') qs') sub ps(s)))) xor (true xor ((x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) and (((q q') qs') sub ps(s))))):Bool
+close
+
+
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = nothing .
+   eq (loc(q',s) = start) = false .
+   eq loc(q',s) = brake .
+
+-- c-tick(q q' qs',t1,s) = true .
+
+ eq (0 < v(q,s)) = true . 
+eq (((-1 * t1) + v(q',s)) <= 4) = true .
+eq (v(q,s) <= 4) = true .
+eq (0 <= v(q,s)) = true . 
+eq (0 <= ((-1 * t1) + v(q',s))) = true . 
+eq ((8 + ((v(q,s) * t1) + x(q,s))) < ((v(q',s) * t1) + ((-1/2 * (t1 * t1)) + x(q',s)))) = true . 
+eq c-tick((q' qs'),t1,s) = true .
+
+
+red istep4(q,q',qs') . -- ((((x(q,s) + (t1 * v(q,s))) < ((-1/2 * (v(q,s) * v(q,s))) + ((t1 * v(q',s)) + ((-1/2 * (t1 * t1)) + x(q',s))))) and ((x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) and (((q q') qs') sub ps(s)))) xor (true xor ((x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) and (((q q') qs') sub ps(s))))):Bool
+
+close
+
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = nothing .
+   eq (loc(q',s) = start) = false .
+   eq loc(q',s) = brake .
+
+-- c-tick(q q' qs',t1,s) = true .
+
+ eq (0 < v(q,s)) = true . 
+eq (((-1 * t1) + v(q',s)) <= 4) = true .
+eq (v(q,s) <= 4) = true .
+eq (0 <= v(q,s)) = true . 
+eq (0 <= ((-1 * t1) + v(q',s))) = true . 
+eq ((8 + ((v(q,s) * t1) + x(q,s))) < ((v(q',s) * t1) + ((-1/2 * (t1 * t1)) + x(q',s)))) = true . 
+eq c-tick((q' qs'),t1,s) = true .
+
+eq ((x(q,s) + (t1 * v(q,s))) < ((-1/2 * (v(q,s) * v(q,s))) + ((t1 * v(q',s)) + ((-1/2 * (t1 * t1)) + x(q',s))))) = true .
+
+
+red istep4(q,q',qs') . -- (true):Bool
+
+close
+
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = nothing .
+   eq (loc(q',s) = start) = false .
+   eq loc(q',s) = brake .
+
+-- c-tick(q q' qs',t1,s) = true .
+
+ eq (0 < v(q,s)) = true . 
+eq (((-1 * t1) + v(q',s)) <= 4) = true .
+eq (v(q,s) <= 4) = true .
+eq (0 <= v(q,s)) = true . 
+eq (0 <= ((-1 * t1) + v(q',s))) = true . 
+eq ((8 + ((v(q,s) * t1) + x(q,s))) < ((v(q',s) * t1) + ((-1/2 * (t1 * t1)) + x(q',s)))) = true . 
+eq c-tick((q' qs'),t1,s) = true .
+
+eq ((x(q,s) + (t1 * v(q,s))) < ((-1/2 * (v(q,s) * v(q,s))) + ((t1 * v(q',s)) + ((-1/2 * (t1 * t1)) + x(q',s))))) = false .
+
+red istep4(q,q',qs') . -- (true xor ((x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) and (((q q') qs') sub ps(s)))):Bool
+
+close
+
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = nothing .
+   eq (loc(q',s) = start) = false .
+   eq loc(q',s) = brake .
+
+-- c-tick(q q' qs',t1,s) = true .
+
+ eq (0 < v(q,s)) = true . 
+eq (((-1 * t1) + v(q',s)) <= 4) = true .
+eq (v(q,s) <= 4) = true .
+eq (0 <= v(q,s)) = true . 
+eq (0 <= ((-1 * t1) + v(q',s))) = true . 
+eq ((8 + ((v(q,s) * t1) + x(q,s))) < ((v(q',s) * t1) + ((-1/2 * (t1 * t1)) + x(q',s)))) = true . 
+eq c-tick((q' qs'),t1,s) = true .
+
+eq ((x(q,s) + (t1 * v(q,s))) < ((-1/2 * (v(q,s) * v(q,s))) + ((t1 * v(q',s)) + ((-1/2 * (t1 * t1)) + x(q',s))))) = false .
+
+eq (x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) = true .
+
+red istep4(q,q',qs') . -- (true xor (((q q') qs') sub ps(s))):Bool
+
+close
+
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = nothing .
+   eq (loc(q',s) = start) = false .
+   eq loc(q',s) = brake .
+
+-- c-tick(q q' qs',t1,s) = true .
+
+ eq (0 < v(q,s)) = true . 
+eq (((-1 * t1) + v(q',s)) <= 4) = true .
+eq (v(q,s) <= 4) = true .
+eq (0 <= v(q,s)) = true . 
+eq (0 <= ((-1 * t1) + v(q',s))) = true . 
+eq ((8 + ((v(q,s) * t1) + x(q,s))) < ((v(q',s) * t1) + ((-1/2 * (t1 * t1)) + x(q',s)))) = true . 
+eq c-tick((q' qs'),t1,s) = true .
+
+eq ((x(q,s) + (t1 * v(q,s))) < ((-1/2 * (v(q,s) * v(q,s))) + ((t1 * v(q',s)) + ((-1/2 * (t1 * t1)) + x(q',s))))) = false .
+
+eq (x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) = true .
+
+eq (((q q') qs') sub ps(s)) = true .
+
+red istep4(q,q',qs') . -- (false):Bool🔴 
+
+close
+
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = nothing .
+   eq (loc(q',s) = start) = false .
+   eq loc(q',s) = brake .
+
+-- c-tick(q q' qs',t1,s) = true .
+
+ eq (0 < v(q,s)) = true . 
+eq (((-1 * t1) + v(q',s)) <= 4) = true .
+eq (v(q,s) <= 4) = true .
+eq (0 <= v(q,s)) = true . 
+eq (0 <= ((-1 * t1) + v(q',s))) = true . 
+eq ((8 + ((v(q,s) * t1) + x(q,s))) < ((v(q',s) * t1) + ((-1/2 * (t1 * t1)) + x(q',s)))) = true . 
+eq c-tick((q' qs'),t1,s) = true .
+
+-- eq ((x(q,s) + (t1 * v(q,s))) < ((-1/2 * (v(q,s) * v(q,s))) + ((t1 * v(q',s)) + ((-1/2 * (t1 * t1)) + x(q',s))))) = false .
+
+eq (x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) = true .
+
+eq (((q q') qs') sub ps(s)) = true .
+
+ ceq ((x(q,s) + (t1 * v(q,s))) < ((-1/2 * (v(q,s) * v(q,s))) + ((t1 * v(q',s)) + ((-1/2 * (t1 * t1)) + x(q',s))))) = true if ((8 + ((v(q,s) * t1) + x(q,s))) < ((v(q',s) * t1) + ((-1/2 * (t1 * t1)) + x(q',s)))) = true .  -- lemma3
+red istep4(q,q',qs') . -- (true):Bool🟢 
+
+close
+
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = nothing .
+   eq (loc(q',s) = start) = false .
+   eq loc(q',s) = brake .
+
+-- c-tick(q q' qs',t1,s) = true .
+
+ eq (0 < v(q,s)) = true . 
+eq (((-1 * t1) + v(q',s)) <= 4) = true .
+eq (v(q,s) <= 4) = true .
+eq (0 <= v(q,s)) = true . 
+eq (0 <= ((-1 * t1) + v(q',s))) = true . 
+eq ((8 + ((v(q,s) * t1) + x(q,s))) < ((v(q',s) * t1) + ((-1/2 * (t1 * t1)) + x(q',s)))) = true . 
+eq c-tick((q' qs'),t1,s) = true .
+
+eq ((x(q,s) + (t1 * v(q,s))) < ((-1/2 * (v(q,s) * v(q,s))) + ((t1 * v(q',s)) + ((-1/2 * (t1 * t1)) + x(q',s))))) = false .
+
+eq (x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) = true .
+
+eq (((q q') qs') sub ps(s)) = false .
+
+red istep4(q,q',qs') . -- (true):Bool
+
+close
+
+
+
+
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = nothing .
+   eq (loc(q',s) = start) = false .
+   eq loc(q',s) = brake .
+
+-- c-tick(q q' qs',t1,s) = true .
+
+ eq (0 < v(q,s)) = true . 
+eq (((-1 * t1) + v(q',s)) <= 4) = true .
+eq (v(q,s) <= 4) = true .
+eq (0 <= v(q,s)) = true . 
+eq (0 <= ((-1 * t1) + v(q',s))) = true . 
+eq ((8 + ((v(q,s) * t1) + x(q,s))) < ((v(q',s) * t1) + ((-1/2 * (t1 * t1)) + x(q',s)))) = true . 
+eq c-tick((q' qs'),t1,s) = true .
+
+eq ((x(q,s) + (t1 * v(q,s))) < ((-1/2 * (v(q,s) * v(q,s))) + ((t1 * v(q',s)) + ((-1/2 * (t1 * t1)) + x(q',s))))) = false .
+
+eq (x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) = false .
+
+red istep4(q,q',qs') . -- (true):Bool
+
+close
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+--> ✅q:brake,
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = brake .
+
+red istep4(q,q',qs') .   -- (((((t1 * v(q,s)) + ((-1/2 * (t1 * t1)) + x(q,s))) < ((if (loc(q',s) = start) then 0 else nextx(x(q',s),v(q',s),ac(loc(q',s)),t1) fi) + (-1/2 * ((v(q,s) + (-1 * t1)) * (v(q,s) + (-1 * t1)))))) and ((x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) and (((q q') qs') sub ps(s)))) xor (true xor ((x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) and (((q q') qs') sub ps(s))))):Bool
+close
+
+--> ✅q:brake,q'start
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = brake .
+   eq loc(q',s) = start .
+
+red istep4(q,q',qs') .   -- (((((t1 * v(q,s)) + ((-1/2 * (t1 * t1)) + x(q,s))) < (-1/2 * ((v(q,s) + (-1 * t1)) * (v(q,s) + (-1 * t1))))) and ((x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) and (((q q') qs') sub ps(s)))) xor (true xor ((x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) and (((q q') qs') sub ps(s))))):Bool
+close
+
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = brake .
+   eq loc(q',s) = start .
+
+   eq (((q q') qs') sub ps(s)) = true . -- from the induction hypothesis
+    eq (q' in ps(s)) = true . -- from the induction hypothesis
+
+
+red istep4(q,q',qs') . -- ((x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) xor (true xor ((((t1 * v(q,s)) + ((-1/2 * (t1 * t1)) + x(q,s))) < (-1/2 * ((v(q,s) + (-1 * t1)) * (v(q,s) + (-1 * t1))))) and (x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s)))))))):Bool
+red inv3(q',s) implies istep1(q,q',qs') . -- (true):Bool
+
+close
+
+
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = brake .
+   eq loc(q',s) = start .
+   eq (((q q') qs') sub ps(s)) = false .
+
+
+red istep4(q,q',qs') .  -- (true):Bool
+
+close
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+--> ✅q:brake,q' not start
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = brake .
+   eq (loc(q',s) = start) = false .
+
+red istep4(q,q',qs') .   -- (((((t1 * v(q,s)) + ((-1/2 * (t1 * t1)) + x(q,s))) < ((-1/2 * ((v(q,s) + (-1 * t1)) * (v(q,s) + (-1 * t1)))) + ((t1 * v(q',s)) + ((1/2 * (ac(loc(q',s)) * (t1 * t1))) + x(q',s))))) and ((x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) and (((q q') qs') sub ps(s)))) xor (true xor ((x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) and (((q q') qs') sub ps(s))))):Bool
+close
+
+--> ✅q:brake,q'accel
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = brake .
+   eq (loc(q',s) = start) = false .
+   eq loc(q',s) = accel .
+
+red istep4(q,q',qs') .   -- (((((t1 * v(q,s)) + ((-1/2 * (t1 * t1)) + x(q,s))) < ((-1/2 * ((v(q,s) + (-1 * t1)) * (v(q,s) + (-1 * t1)))) + ((t1 * v(q',s)) + ((1/2 * (t1 * t1)) + x(q',s))))) and ((x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) and (((q q') qs') sub ps(s)))) xor (true xor ((x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) and (((q q') qs') sub ps(s))))):Bool
+close
+
+
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = brake .
+   eq (loc(q',s) = start) = false .
+   eq loc(q',s) = accel .
+ eq (((t1 * v(q,s)) + ((-1/2 * (t1 * t1)) + x(q,s))) < ((-1/2 * ((v(q,s) + (-1 * t1)) * (v(q,s) + (-1 * t1)))) + ((t1 * v(q',s)) + ((1/2 * (t1 * t1)) + x(q',s))))) = true .
+
+red istep4(q,q',qs') . -- (true):Bool
+
+close
+
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = brake .
+   eq (loc(q',s) = start) = false .
+   eq loc(q',s) = accel .
+ eq (((t1 * v(q,s)) + ((-1/2 * (t1 * t1)) + x(q,s))) < ((-1/2 * ((v(q,s) + (-1 * t1)) * (v(q,s) + (-1 * t1)))) + ((t1 * v(q',s)) + ((1/2 * (t1 * t1)) + x(q',s))))) = false .
+
+red istep4(q,q',qs') . -- (true xor ((x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) and (((q q') qs') sub ps(s)))):Bool
+
+close
+
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = brake .
+   eq (loc(q',s) = start) = false .
+   eq loc(q',s) = accel .
+ eq (((t1 * v(q,s)) + ((-1/2 * (t1 * t1)) + x(q,s))) < ((-1/2 * ((v(q,s) + (-1 * t1)) * (v(q,s) + (-1 * t1)))) + ((t1 * v(q',s)) + ((1/2 * (t1 * t1)) + x(q',s))))) = false .
+ eq (x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) = true .
+red istep4(q,q',qs') . -- (true xor (((q q') qs') sub ps(s))):Bool
+
+close
+
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = brake .
+   eq (loc(q',s) = start) = false .
+   eq loc(q',s) = accel .
+ eq (((t1 * v(q,s)) + ((-1/2 * (t1 * t1)) + x(q,s))) < ((-1/2 * ((v(q,s) + (-1 * t1)) * (v(q,s) + (-1 * t1)))) + ((t1 * v(q',s)) + ((1/2 * (t1 * t1)) + x(q',s))))) = false .
+ eq (x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) = true .
+ eq (((q q') qs') sub ps(s)) = true .
+red istep4(q,q',qs') . -- (false):Bool🔴
+
+close
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = brake .
+   eq (loc(q',s) = start) = false .
+   eq loc(q',s) = accel .
+-- eq (((t1 * v(q,s)) + ((-1/2 * (t1 * t1)) + x(q,s))) < ((-1/2 * ((v(q,s) + (-1 * t1)) * (v(q,s) + (-1 * t1)))) + ((t1 * v(q',s)) + ((1/2 * (t1 * t1)) + x(q',s))))) = false .
+
+ eq (x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) = true .
+
+ ceq (((t1 * v(q,s)) + ((-1/2 * (t1 * t1)) + x(q,s))) < ((-1/2 * ((v(q,s) + (-1 * t1)) * (v(q,s) + (-1 * t1)))) + x(q',s))) = true if (x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) = true . -- lemma4
+
+ ceq (((t1 * v(q,s)) + ((-1/2 * (t1 * t1)) + x(q,s))) < ((-1/2 * ((v(q,s) + (-1 * t1)) * (v(q,s) + (-1 * t1)))) + ((t1 * v(q',s)) + ((1/2 * (t1 * t1)) + x(q',s))))) = true if (((t1 * v(q,s)) + ((-1/2 * (t1 * t1)) + x(q,s))) < ((-1/2 * ((v(q,s) + (-1 * t1)) * (v(q,s) + (-1 * t1)))) + x(q',s))) = true . -- lemma2
+ 
+eq (((q q') qs') sub ps(s)) = true .
+red istep4(q,q',qs') . -- (true):Bool🟢 
+--> ✅🔴🟢🌈🟡🟠🔵🟣tick
+close
+
+
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = brake .
+   eq (loc(q',s) = start) = false .
+   eq loc(q',s) = accel .
+ eq (((t1 * v(q,s)) + ((-1/2 * (t1 * t1)) + x(q,s))) < ((-1/2 * ((v(q,s) + (-1 * t1)) * (v(q,s) + (-1 * t1)))) + ((t1 * v(q',s)) + ((1/2 * (t1 * t1)) + x(q',s))))) = false .
+ eq (x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) = true .
+ eq (((q q') qs') sub ps(s)) = false .
+red istep4(q,q',qs') . -- (true):Bool
+
+close
+
+
+
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = brake .
+   eq (loc(q',s) = start) = false .
+   eq loc(q',s) = accel .
+ eq (((t1 * v(q,s)) + ((-1/2 * (t1 * t1)) + x(q,s))) < ((-1/2 * ((v(q,s) + (-1 * t1)) * (v(q,s) + (-1 * t1)))) + ((t1 * v(q',s)) + ((1/2 * (t1 * t1)) + x(q',s))))) = false .
+ eq (x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) = false .
+
+red istep4(q,q',qs') . -- (true):Bool
+
+close
+
+
+
+
+
+--> ✅q:brake,q'nothing
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = brake .
+   eq (loc(q',s) = start) = false .
+   eq loc(q',s) = nothing .
+
+red istep4(q,q',qs') .   -- (((((t1 * v(q,s)) + ((-1/2 * (t1 * t1)) + x(q,s))) < ((-1/2 * ((v(q,s) + (-1 * t1)) * (v(q,s) + (-1 * t1)))) + ((t1 * v(q',s)) + x(q',s)))) and ((x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) and (((q q') qs') sub ps(s)))) xor (true xor ((x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) and (((q q') qs') sub ps(s))))):Bool
+close
+
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = brake .
+   eq (loc(q',s) = start) = false .
+   eq loc(q',s) = nothing .
+
+  eq (((t1 * v(q,s)) + ((-1/2 * (t1 * t1)) + x(q,s))) < ((-1/2 * ((v(q,s) + (-1 * t1)) * (v(q,s) + (-1 * t1)))) + ((t1 * v(q',s)) + x(q',s)))) = true .
+red istep4(q,q',qs') . -- (true):Bool
+close
+
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = brake .
+   eq (loc(q',s) = start) = false .
+   eq loc(q',s) = nothing .
+
+    eq (((t1 * v(q,s)) + ((-1/2 * (t1 * t1)) + x(q,s))) < ((-1/2 * ((v(q,s) + (-1 * t1)) * (v(q,s) + (-1 * t1)))) + ((t1 * v(q',s)) + x(q',s)))) = false .
+red istep4(q,q',qs') . -- (true xor ((x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) and (((q q') qs') sub ps(s)))):Bool
+close
+
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = brake .
+   eq (loc(q',s) = start) = false .
+   eq loc(q',s) = nothing .
+
+    eq (((t1 * v(q,s)) + ((-1/2 * (t1 * t1)) + x(q,s))) < ((-1/2 * ((v(q,s) + (-1 * t1)) * (v(q,s) + (-1 * t1)))) + ((t1 * v(q',s)) + x(q',s)))) = false .
+    eq (x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) = true .
+red istep4(q,q',qs') . -- (true xor (((q q') qs') sub ps(s))):Bool
+close
+
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = brake .
+   eq (loc(q',s) = start) = false .
+   eq loc(q',s) = nothing .
+
+    eq (((t1 * v(q,s)) + ((-1/2 * (t1 * t1)) + x(q,s))) < ((-1/2 * ((v(q,s) + (-1 * t1)) * (v(q,s) + (-1 * t1)))) + ((t1 * v(q',s)) + x(q',s)))) = false .
+    eq (x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) = true .
+
+    eq (((q q') qs') sub ps(s)) = true .
+red istep4(q,q',qs') . -- (false):Bool🔴
+close
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = brake .
+   eq (loc(q',s) = start) = false .
+   eq loc(q',s) = nothing .
+
+  --  eq (((t1 * v(q,s)) + ((-1/2 * (t1 * t1)) + x(q,s))) < ((-1/2 * ((v(q,s) + (-1 * t1)) * (v(q,s) + (-1 * t1)))) + ((t1 * v(q',s)) + x(q',s)))) = false .
+    eq (x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) = true .
+
+
+ ceq (((t1 * v(q,s)) + ((-1/2 * (t1 * t1)) + x(q,s))) < ((-1/2 * ((v(q,s) + (-1 * t1)) * (v(q,s) + (-1 * t1)))) + x(q',s))) = true if (x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) = true .  -- lemma4
+ ceq (((t1 * v(q,s)) + ((-1/2 * (t1 * t1)) + x(q,s))) < ((-1/2 * ((v(q,s) + (-1 * t1)) * (v(q,s) + (-1 * t1)))) + ((t1 * v(q',s)) + x(q',s)))) = true if (((t1 * v(q,s)) + ((-1/2 * (t1 * t1)) + x(q,s))) < ((-1/2 * ((v(q,s) + (-1 * t1)) * (v(q,s) + (-1 * t1)))) + x(q',s))) = true . -- lemma2
+
+    eq (((q q') qs') sub ps(s)) = true .
+red istep4(q,q',qs') . -- (true):Bool🟢
+close
+
+
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = brake .
+   eq (loc(q',s) = start) = false .
+   eq loc(q',s) = nothing .
+
+    eq (((t1 * v(q,s)) + ((-1/2 * (t1 * t1)) + x(q,s))) < ((-1/2 * ((v(q,s) + (-1 * t1)) * (v(q,s) + (-1 * t1)))) + ((t1 * v(q',s)) + x(q',s)))) = false .
+    eq (x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) = true .
+    eq (((q q') qs') sub ps(s)) = false .
+red istep4(q,q',qs') . -- (true):Bool
+close
+
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = brake .
+   eq (loc(q',s) = start) = false .
+   eq loc(q',s) = nothing .
+
+    eq (((t1 * v(q,s)) + ((-1/2 * (t1 * t1)) + x(q,s))) < ((-1/2 * ((v(q,s) + (-1 * t1)) * (v(q,s) + (-1 * t1)))) + ((t1 * v(q',s)) + x(q',s)))) = false .
+    eq (x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) = false .
+red istep4(q,q',qs') . -- (true):Bool
+
+close
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+--> ✅q:brake,q'brake
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = brake .
+   eq (loc(q',s) = start) = false .
+   eq loc(q',s) = brake .
+
+red istep4(q,q',qs') .   -- (((((t1 * v(q,s)) + ((-1/2 * (t1 * t1)) + x(q,s))) < ((-1/2 * ((v(q,s) + (-1 * t1)) * (v(q,s) + (-1 * t1)))) + ((t1 * v(q',s)) + ((-1/2 * (t1 * t1)) + x(q',s))))) and ((x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) and (((q q') qs') sub ps(s)))) xor (true xor ((x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) and (((q q') qs') sub ps(s))))):Bool
+close
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = brake .
+   eq (loc(q',s) = start) = false .
+   eq loc(q',s) = brake .
+
+  eq (((t1 * v(q,s)) + ((-1/2 * (t1 * t1)) + x(q,s))) < ((-1/2 * ((v(q,s) + (-1 * t1)) * (v(q,s) + (-1 * t1)))) + ((t1 * v(q',s)) + ((-1/2 * (t1 * t1)) + x(q',s))))) = true .
+
+red istep4(q,q',qs') .   -- (true):Bool
+close
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = brake .
+   eq (loc(q',s) = start) = false .
+   eq loc(q',s) = brake .
+
+eq (((t1 * v(q,s)) + ((-1/2 * (t1 * t1)) + x(q,s))) < ((-1/2 * ((v(q,s) + (-1 * t1)) * (v(q,s) + (-1 * t1)))) + ((t1 * v(q',s)) + ((-1/2 * (t1 * t1)) + x(q',s))))) = false .
+
+red istep4(q,q',qs') .   -- (true xor ((x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) and (((q q') qs') sub ps(s)))):Bool
+close
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = brake .
+   eq (loc(q',s) = start) = false .
+   eq loc(q',s) = brake .
+
+eq (((t1 * v(q,s)) + ((-1/2 * (t1 * t1)) + x(q,s))) < ((-1/2 * ((v(q,s) + (-1 * t1)) * (v(q,s) + (-1 * t1)))) + ((t1 * v(q',s)) + ((-1/2 * (t1 * t1)) + x(q',s))))) = false .
+eq (x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) = true .
+red istep4(q,q',qs') .   -- (true xor (((q q') qs') sub ps(s))):Bool
+close
+
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = brake .
+   eq (loc(q',s) = start) = false .
+   eq loc(q',s) = brake .
+
+eq (((t1 * v(q,s)) + ((-1/2 * (t1 * t1)) + x(q,s))) < ((-1/2 * ((v(q,s) + (-1 * t1)) * (v(q,s) + (-1 * t1)))) + ((t1 * v(q',s)) + ((-1/2 * (t1 * t1)) + x(q',s))))) = false .
+eq (x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) = true .
+eq (((q q') qs') sub ps(s)) = true .
+red istep4(q,q',qs') .   -- (false):Bool🔴
+close
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = brake .
+   eq (loc(q',s) = start) = false .
+   eq loc(q',s) = brake .
+
+-- eq (((t1 * v(q,s)) + ((-1/2 * (t1 * t1)) + x(q,s))) < ((-1/2 * ((v(q,s) + (-1 * t1)) * (v(q,s) + (-1 * t1)))) + ((t1 * v(q',s)) + ((-1/2 * (t1 * t1)) + x(q',s))))) = false .
+
+eq (x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) = true .
+eq (((q q') qs') sub ps(s)) = true .
+
+ ceq (((t1 * v(q,s)) + ((-1/2 * (t1 * t1)) + x(q,s))) < ((-1/2 * ((v(q,s) + (-1 * t1)) * (v(q,s) + (-1 * t1)))) + x(q',s))) = true if (x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) = true .  -- lemma4
+
+ ceq (((t1 * v(q,s)) + ((-1/2 * (t1 * t1)) + x(q,s))) < ((-1/2 * ((v(q,s) + (-1 * t1)) * (v(q,s) + (-1 * t1)))) + ((t1 * v(q',s)) + ((-1/2 * (t1 * t1)) + x(q',s))))) = true if (((t1 * v(q,s)) + ((-1/2 * (t1 * t1)) + x(q,s))) < ((-1/2 * ((v(q,s) + (-1 * t1)) * (v(q,s) + (-1 * t1)))) + x(q',s))) = true .-- lemma2
+red istep4(q,q',qs') .   -- (true):Bool🟢
+close
+
+eof
+-- ✅🔴🟢🌈🟡🟠🔵🟣tick
+-- ✅🔴🟢🌈🟡🟠🔵🟣tick
+-- ✅🔴🟢🌈🟡🟠🔵🟣tick
+-- ✅🔴🟢🌈🟡🟠🔵🟣tick
+-- ✅🔴🟢🌈🟡🟠🔵🟣tick
+-- ✅🔴🟢🌈🟡🟠🔵🟣tick
+-- ✅🔴🟢🌈🟡🟠🔵🟣tick
+-- ✅🔴🟢🌈🟡🟠🔵🟣tick
+
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = brake .
+   eq (loc(q',s) = start) = false .
+   eq loc(q',s) = brake .
+
+eq (((t1 * v(q,s)) + ((-1/2 * (t1 * t1)) + x(q,s))) < ((-1/2 * ((v(q,s) + (-1 * t1)) * (v(q,s) + (-1 * t1)))) + ((t1 * v(q',s)) + ((-1/2 * (t1 * t1)) + x(q',s))))) = false .
+eq (x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) = true .
+eq (((q q') qs') sub ps(s)) = false .
+red istep4(q,q',qs') .   -- (true):Bool
+close
+
+
+
+
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = true .
+   eq s' = tick(t1,s) .
+   eq (loc(q,s) = start) = false .
+   eq loc(q,s) = brake .
+   eq (loc(q',s) = start) = false .
+   eq loc(q',s) = brake .
+
+eq (((t1 * v(q,s)) + ((-1/2 * (t1 * t1)) + x(q,s))) < ((-1/2 * ((v(q,s) + (-1 * t1)) * (v(q,s) + (-1 * t1)))) + ((t1 * v(q',s)) + ((-1/2 * (t1 * t1)) + x(q',s))))) = false .
+eq (x(q,s) < (x(q',s) + (-1/2 * (v(q,s) * v(q,s))))) = false .
+red istep4(q,q',qs') .   -- (true):Bool
+close
+
+
+
+
+
+
+--> ✅c-tick = false
+open ISTEP .
+   op t1 : -> Rat .
+   eq c-tick(t1,s) = false .
+   eq s' = tick(t1,s) .
+red istep4(q,q',qs') .  -- (true):Bool
+close
+
+eof
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
