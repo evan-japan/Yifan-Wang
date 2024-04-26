@@ -1,0 +1,35 @@
+Hello everyone, this is Yifan Wang
+Project Description: We formalized an autonomous vehicle group control system using CafeOBJ algebra. Additionally, we confirm system safety using the proof score method.
+Installation instructions: https://cafeobj.org/download/
+Instructions for use: for example:
+          -- loading standard prelude
+
+            -- CafeOBJ system Version 1.6.1(PigNose0.99) --
+                   built: 2021 Aug 6 Fri 4:49:58 GMT
+                         prelude file: std.bin
+                                  ***
+                      2024 Apr 10 Wed 2:17:59 GMT
+                            Type ? for help
+                                  ***
+                  -- Containing PigNose Extensions --
+                                  ---
+                             built on SBCL
+                                 2.1.7
+               CafeOBJ> in /Users/wangyifan/Desktop/doctor/2023ejournal/20240213-a-n-b-istep1.cafe
+Results presentation: for example:
+         -- opening module INV
+         -- reduce in %INV : (inv1(q,q',qs',init)):Bool
+         (true):Bool
+         (0.0000 sec for parse, 0.0007 sec for 11 rewrites + 58 matches)
+          -- opening module INV
+          -- reduce in %INV : (inv2(q,init)):Bool
+          (true):Bool
+          (0.0000 sec for parse, 0.0001 sec for 11 rewrites + 28 matches)
+          -- opening module INV
+          -- reduce in %INV : (inv3(q,init)):Bool
+          (true):Bool
+           (0.0000 sec for parse, 0.0000 sec for 11 rewrites + 20 matches)
+           -- opening module INV
+           -- reduce in %INV : (inv4(q,q',qs',init)):Bool
+           (true):Bool
+Contact information: evan931012@gmail.com
